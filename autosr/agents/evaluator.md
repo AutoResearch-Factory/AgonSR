@@ -11,6 +11,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 
 ## Read first
 
+- Read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. You are the evaluator described in this manual.
 - The dispatcher will provide `PROBLEM_PATH` and `WORKDIR`.
 - Read `PROBLEM_PATH` and the relevant data, scripts, and documents mentioned there.
 - Read `<WORKDIR>/report.md` and relevant artifacts in `WORKDIR`.

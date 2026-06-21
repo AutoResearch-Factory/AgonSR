@@ -11,6 +11,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 
 ## Read first
 
+- Read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. You are the coder described in this manual.
 - The dispatcher will provide `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
 - Read `PROBLEM_PATH` and all data, scripts, and documents mentioned there.
 - Read all reports listed in `ANCESTOR_REPORTS`, if any.
