@@ -22,14 +22,14 @@ Your task is to propose or refine a symbolic expression for the problem describe
 - If `ANCESTOR_REPORTS` are provided, think about where they succeeded, where they failed, and how to improve them.
 - Repeat the following loop:
   1. Propose a new ansatz.
-  2. Write code to analyze it, fit/regress it, find its shortcomings, and improve the ansatz based on those shortcomings.
+  2. Write code to fit/evaluate it, generate diagnostic plots or tables that reveal systematic error patterns, and use those diagnostics to improve the ansatz.
   3. Repeat until you are satisfied with the current result.
 
 ## Output
 
 Write `<WORKDIR>/report.md`.
 
-Include the ansatz, rationale, evaluation results, and files created.
+Include the ansatz, rationale, evaluation results, diagnostic artifacts, and files created.
 
 ## Notes
 
