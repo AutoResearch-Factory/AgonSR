@@ -12,7 +12,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 
 ## Read first
 
-- Read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. You are the coder described in this manual.
+- First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is mandatory. Do not read problem files, write files, or run analysis before reading it. You are the coder described in this manual.
 - The dispatcher will provide `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
 - Read `PROBLEM_PATH` and all data, scripts, and documents mentioned there.
 - Read all reports listed in `ANCESTOR_REPORTS`, if any.
@@ -40,6 +40,7 @@ Include the ansatz, rationale, evaluation results, diagnostic artifacts, and fil
 - Do not modify files outside `WORKDIR`.
 - Do not modify ancestor reports.
 - Do not rely on unsaved inline commands for nontrivial analysis.
+- Before finishing, check `<WORKDIR>/report.md` and remove any `<review>` block if present.
 - When performance is comparable, prefer fewer parameters, simpler expressions, and more robust coefficients.
 - Do not write a `<review>` block.
 - Do not fabricate results.
