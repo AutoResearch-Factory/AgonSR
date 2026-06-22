@@ -1,7 +1,8 @@
 ---
 name: evaluator
 description: Review and score a candidate symbolic ansatz for the current problem
-model: sonnet
+model: opus
+effort: medium
 argument-hint: [problem-path] [workdir]
 ---
 

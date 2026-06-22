@@ -1,7 +1,8 @@
 ---
 name: coder
 description: Propose or refine symbolic ansatz expressions for the current problem
-model: sonnet
+model: opus
+effort: medium
 argument-hint: [problem-path] [ancestor-reports] [workdir]
 ---
 
