@@ -215,8 +215,6 @@ def cmd_update(args: argparse.Namespace) -> None:
     if cid not in state["nodes"] or cid == ROOT_ID:
         raise SystemExit(f"unknown candidate id: {cid}")
     score = float(args.score)
-    if not (0.0 <= score <= 10.0):
-        raise SystemExit("score must be between 0 and 10")
 
     node = state["nodes"][cid]
     node["score"] = score
