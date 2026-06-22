@@ -20,10 +20,10 @@ Your task is to propose or refine a symbolic expression for the problem describe
 
 - Understand the problem from `PROBLEM_PATH`.
 - If `ANCESTOR_REPORTS` are provided, think about where they succeeded, where they failed, and how to improve them.
-- Repeat the following loop:
-  1. Propose a new ansatz.
-  2. Write code to fit/evaluate it, generate diagnostic plots or tables that reveal systematic error patterns, and use those diagnostics to improve the ansatz.
-  3. Repeat until you are satisfied with the current result.
+- Repeat the following loop at least 3 times:
+  1. Propose or revise an ansatz.
+  2. Write and save analysis code in `WORKDIR` to fit/evaluate it. Save key diagnostic plots, tables, or scripts that support important decisions, and use those diagnostics to improve the ansatz.
+  3. Continue until you are satisfied with the current result.
 
 ## Output
 
@@ -36,5 +36,6 @@ Include the ansatz, rationale, evaluation results, diagnostic artifacts, and fil
 - Follow the instructions in `PROBLEM_PATH`.
 - Do not modify files outside `WORKDIR`.
 - Do not modify ancestor reports.
+- Do not rely on unsaved inline commands for nontrivial analysis.
 - Do not write a `<review>` block.
 - Do not fabricate results.
