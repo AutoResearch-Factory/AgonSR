@@ -21,7 +21,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 - Understand the problem, constraints, and evaluation criteria from `PROBLEM_PATH`.
 - Check whether the candidate actually supports its claims.
 - Re-run or inspect evaluations when needed.
-- Identify strengths, failures, constraint violations, and the most useful next improvements.
+- Identify strengths, unsupported claims, failures, constraint violations, and systematic error patterns. Focus on diagnosis, not solution design.
 
 
 ## LeafCount example
@@ -53,4 +53,5 @@ Put all review content inside this block. Do not write `## Evaluator Review` or 
 - Do not modify files outside `WORKDIR`.
 - Do not modify the candidate body except for replacing the review block.
 - Do not fabricate results.
+- Do not propose new ansatzes or prescribe next-step solutions.
 - If the candidate cannot be evaluated, give a low score and explain why.
