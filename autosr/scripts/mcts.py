@@ -159,9 +159,9 @@ def _print_next(run_dir: Path, cid: str) -> None:
     if not ancestors:
         print("none")
         return
-    labels = ["father", "grandfather"]
+    labels = {0: "ancestor 1 (father)", 1: "ancestor 2 (grandfather)"}
     for i, aid in enumerate(ancestors):
-        label = labels[i] if i < len(labels) else f"ancestor {i + 1}"
+        label = labels.get(i, f"ancestor {i + 1}")
         print(f"- {label}: {_report_path(run_dir, aid)}")
 
 
