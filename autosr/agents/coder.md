@@ -34,6 +34,8 @@ Write `<WORKDIR>/report.md`.
 
 Include the ansatz, rationale, evaluation results, diagnostic artifacts, and files created.
 
+Finally, briefly report: what you did, what difficulties you hit, how you resolved them (or didn't), and any open questions.
+
 ## Notes
 
 - Follow the instructions in `PROBLEM_PATH`.

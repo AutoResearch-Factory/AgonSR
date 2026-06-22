@@ -48,6 +48,8 @@ Append or replace exactly this block in `<WORKDIR>/report.md`:
 
 Put all review content inside this block. Do not write `## Evaluator Review` or any review text outside it.
 
+Finally, briefly report: what you did, what difficulties you hit, how you resolved them (or didn't), and any open questions.
+
 ## Notes
 
 - Higher is better.
