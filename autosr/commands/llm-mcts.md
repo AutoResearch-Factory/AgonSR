@@ -15,18 +15,18 @@ Do not reason about ansatz quality yourself.
 - Interpret the second argument as `PROBLEM_PATH`. If it is not provided, use `problem.md` in the current working directory.
 - If `IGNOREME.md` exists next to `PROBLEM_PATH`, read it. Extract `CODER_NOTES` from `## Notes to coder` and `EVALUATOR_NOTES` from `## Notes to evaluator`. If a section is missing, use an empty string.
 - Support two modes:
-  - New run: run `mcts.py init` and read `RUN_DIR` from its output.
-  - Resume: if `--resume run-dir` is provided, set `RUN_DIR` to that path and skip `mcts.py init`.
+  - New run: run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init` and read `RUN_DIR` from its output.
+  - Resume: if `--resume run-dir` is provided, set `RUN_DIR` to that path and skip `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init`.
 
 ## Loop
 
 Repeat `ROUNDS` times:
 
-1. Run `mcts.py next --run-dir RUN_DIR`, then read `CANDIDATE_ID`, `WORKDIR`, and `ANCESTOR_REPORTS` from its output.
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py next --run-dir RUN_DIR`, then read `CANDIDATE_ID`, `WORKDIR`, and `ANCESTOR_REPORTS` from its output.
 2. Call the `coder` agent using exactly the Coder prompt template.
 3. Call the `evaluator` agent using exactly the Evaluator prompt template.
 4. Read `<WORKDIR>/report.md` and extract the score from its `<review score="X">` block.
-5. Run `mcts.py update --run-dir RUN_DIR --candidate-id CANDIDATE_ID --score SCORE`.
+5. Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py update --run-dir RUN_DIR --candidate-id CANDIDATE_ID --score SCORE`.
 
 ### Subagent prompt templates
 
@@ -37,7 +37,7 @@ When dispatching subagents, send exactly the template below. Do not add advice, 
 
 ## Finish
 
-Run `mcts.py show --run-dir RUN_DIR` and report the best candidates to the user.
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py show --run-dir RUN_DIR` and report the best candidates to the user.
 
 ## Rules
 
