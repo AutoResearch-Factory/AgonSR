@@ -22,10 +22,17 @@ Do not reason about ansatz quality yourself.
 Repeat `ROUNDS` times:
 
 1. Run `mcts.py next --run-dir RUN_DIR`, then read `CANDIDATE_ID`, `WORKDIR`, and `ANCESTOR_REPORTS` from its output.
-2. Call the `coder` agent with `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
-3. Call the `evaluator` agent with `PROBLEM_PATH` and `WORKDIR`.
+2. Call the `coder` agent using exactly the Coder prompt template.
+3. Call the `evaluator` agent using exactly the Evaluator prompt template.
 4. Read `<WORKDIR>/report.md` and extract the score from its `<review score="X">` block.
 5. Run `mcts.py update --run-dir RUN_DIR --candidate-id CANDIDATE_ID --score SCORE`.
+
+### Subagent prompt templates
+
+When dispatching subagents, send exactly the template below. Do not add advice, analysis, summaries, or extra instructions.
+
+- Coder prompt: `PROBLEM_PATH: {PROBLEM_PATH}, ANCESTOR_REPORTS: {ANCESTOR_REPORTS}, WORKDIR: {WORKDIR}`
+- Evaluator prompt: `PROBLEM_PATH: {PROBLEM_PATH}, WORKDIR: {WORKDIR}`
 
 ## Finish
 
@@ -35,5 +42,5 @@ Run `mcts.py show --run-dir RUN_DIR` and report the best candidates to the user.
 
 - You only dispatch; do not do any concrete scientific or coding work yourself.
 - Do not edit or score candidates (`report.md`) yourself.
-- If `report.md` is missing, resume coder and ask what happened.
-- If the review block or score is missing, resume evaluator and ask what happened.
+- If `report.md` is missing, resume coder using exactly the Coder prompt template.
+- If the review block or score is missing, resume evaluator using exactly the Evaluator prompt template.
