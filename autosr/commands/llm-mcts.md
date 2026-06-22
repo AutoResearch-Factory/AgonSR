@@ -13,6 +13,7 @@ Do not reason about ansatz quality yourself.
 - Read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`.
 - Interpret the first argument as `ROUNDS`.
 - Interpret the second argument as `PROBLEM_PATH`. If it is not provided, use `problem.md` in the current working directory.
+- If `IGNOREME.md` exists next to `PROBLEM_PATH`, read it. Extract `CODER_NOTES` from `## Notes to coder` and `EVALUATOR_NOTES` from `## Notes to evaluator`. If a section is missing, use an empty string.
 - Support two modes:
   - New run: run `mcts.py init` and read `RUN_DIR` from its output.
   - Resume: if `--resume run-dir` is provided, set `RUN_DIR` to that path and skip `mcts.py init`.
@@ -31,8 +32,8 @@ Repeat `ROUNDS` times:
 
 When dispatching subagents, send exactly the template below. Do not add advice, analysis, summaries, or extra instructions.
 
-- Coder prompt: `PROBLEM_PATH: {PROBLEM_PATH}, ANCESTOR_REPORTS: {ANCESTOR_REPORTS}, WORKDIR: {WORKDIR}`
-- Evaluator prompt: `PROBLEM_PATH: {PROBLEM_PATH}, WORKDIR: {WORKDIR}`
+- Coder prompt: `PROBLEM_PATH: {PROBLEM_PATH}, ANCESTOR_REPORTS: {ANCESTOR_REPORTS}, WORKDIR: {WORKDIR}, Special notes from user: {CODER_NOTES}`
+- Evaluator prompt: `PROBLEM_PATH: {PROBLEM_PATH}, WORKDIR: {WORKDIR}, Special notes from user: {EVALUATOR_NOTES}`
 
 ## Finish
 
