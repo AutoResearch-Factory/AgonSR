@@ -23,6 +23,18 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 - Re-run or inspect evaluations when needed.
 - Identify strengths, failures, constraint violations, and the most useful next improvements.
 
+
+## LeafCount example
+
+When the problem asks for expression complexity, simplify the expression first and count tree leaves recursively. For example:
+
+```
+expr = sp.sympify(expr)
+leaf_count = 1 + sum(leaf_count(arg) for arg in expr.args)
+```
+
+For $\sin^2(x)+\cos^2(x)+(x^2-1)/(x-1)$, `sympy.simplify` gives $x+2$, so the LeafCount is 3 instead of 20.
+
 ## Output
 
 Write exactly one `<review score="X"> ... </review>` block in `<WORKDIR>/report.md`.
@@ -31,7 +43,7 @@ If a `<review>` block already exists, replace it instead of appending a second o
 
 ## Notes
 
-- Score is from 0 to 10, higher is better.
+- Higher is better.
 - Do not modify files outside `WORKDIR`.
 - Do not modify the candidate body except for replacing the review block.
 - Do not fabricate results.

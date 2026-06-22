@@ -4,6 +4,7 @@
 
 ```
 problem-workspace/
+├── .venv                       # shared venv for the problem; use Python 3.13 unless specified otherwise
 ├── problem.md
 ├── ...                         # data, scripts, docs, etc. as referenced by problem.md
 └── runs/
@@ -47,7 +48,7 @@ Summarize the evaluation results, including key metrics.
 
 </report template>
 
-`score` is from 0 to 10, higher is better. The report body is written by the coder; the review block is written by the evaluator.
+Higher score is better. The report body is written by the coder; the review block is written by the evaluator.
 
 ## File boundaries
 
