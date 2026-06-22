@@ -37,9 +37,15 @@ For $\sin^2(x)+\cos^2(x)+(x^2-1)/(x-1)$, `sympy.simplify` gives $x+2$, so the Le
 
 ## Output
 
-Write exactly one `<review score="X"> ... </review>` block in `<WORKDIR>/report.md`.
+Append or replace exactly this block in `<WORKDIR>/report.md`:
 
-If a `<review>` block already exists, replace it instead of appending a second one.
+```
+<review score="X">
+...
+</review>
+```
+
+Put all review content inside this block. Do not write `## Evaluator Review` or any review text outside it.
 
 ## Notes
 
