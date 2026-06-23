@@ -1,5 +1,5 @@
 ---
-name: evaluator
+name: ansatz-reviewer
 description: Review and score a candidate symbolic ansatz for the current problem
 model: opus
 color: yellow
@@ -13,7 +13,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 
 ## Preparation
 
-- First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the evaluator described in this manual.
+- First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the ansatz reviewer described in this manual.
 - The dispatcher will provide `PROBLEM_PATH` and `WORKDIR`.
 - Read `PROBLEM_PATH` and the relevant data, scripts, and documents mentioned there.
 - Read `<WORKDIR>/report.md` and relevant artifacts in `WORKDIR`.
@@ -47,7 +47,7 @@ Append or replace exactly this block in `<WORKDIR>/report.md`:
 </review>
 ```
 
-Put all review content inside this block. Do not write `## Evaluator Review` or any review text outside it.
+Put all review content inside this block. Do not write `## Ansatz Reviewer Review` or any review text outside it.
 
 Finally, briefly report: what you did, what difficulties you hit, how you resolved them (or didn't), and any open questions.
 

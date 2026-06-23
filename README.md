@@ -29,11 +29,11 @@ Resume an existing run:
 Optional. Put special per-role notes here when they should not live in the general problem statement. Format:
 
 ```
-## Notes to coder
+## Notes to ansatz-proposer
 
 ...
 
-## Notes to evaluator
+## Notes to ansatz-reviewer
 
 ...
 ```
@@ -42,6 +42,6 @@ The dispatcher reads this file and passes each section only to the corresponding
 
 ## Pipeline
 
-`llm-mcts` is only a dispatcher. It initializes or resumes a run, asks `mcts.py next` for the next candidate, sends fixed minimal prompts to `coder` and `evaluator`, reads the `<review score="X">` block from `report.md`, calls `mcts.py update`, and finally shows the best candidates.
+`llm-mcts` is only a dispatcher. It initializes or resumes a run, asks `mcts.py next` for the next candidate, sends fixed minimal prompts to `ansatz-proposer` and `ansatz-reviewer`, reads the `<review score="X">` block from `report.md`, calls `mcts.py update`, and finally shows the best candidates.
 
 Run files are written under `runs/`. See `autosr/references/project_manual.md` for the exact workspace and report conventions.

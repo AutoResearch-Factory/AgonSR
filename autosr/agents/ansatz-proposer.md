@@ -1,5 +1,5 @@
 ---
-name: coder
+name: ansatz-proposer
 description: Propose or refine symbolic ansatz expressions for the current problem
 model: opus
 color: blue
@@ -13,7 +13,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 
 ## Preparation
 
-- First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the coder described in this manual.
+- First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the ansatz proposer described in this manual.
 - The dispatcher will provide `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
 - Read `PROBLEM_PATH` and all data, scripts, and documents mentioned there.
 - Read all reports listed in `ANCESTOR_REPORTS`, if any.
@@ -44,7 +44,7 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Do not modify ancestor reports.
 - Do not rely on unsaved inline commands for nontrivial analysis.
 - Make results reproducible. If randomness is used, expose and fix a seed.
-- Smoke-test important commands locally. Use `timeout 1200 ...` for commands that may run long.
+- Run all scripts with a 10-minute wall-clock limit: use `timeout 600 ...` for each run. You may run scripts multiple times.
 - Maintain clear, concise, accurate, actionable documentation.
 - Use the problem workspace `.venv` when available. If you introduce dependencies, record exact versions.
 - Use `ruff` and unit tests for nontrivial reusable code or interfaces.

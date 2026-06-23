@@ -48,7 +48,7 @@ Summarize the evaluation results, including key metrics.
 
 </report template>
 
-Higher score is better. The report body is written by the coder; the review block is written by the evaluator.
+Higher score is better. The report body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
 
 ## File boundaries
 
