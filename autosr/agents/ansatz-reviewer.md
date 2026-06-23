@@ -3,7 +3,6 @@ name: ansatz-reviewer
 description: Review and score a candidate symbolic ansatz for the current problem
 model: opus
 color: yellow
-effort: medium
 argument-hint: "[problem-path] [workdir]"
 ---
 
