@@ -1,0 +1,8 @@
+{
+  "name": "autosr",
+  "description": "Symbolic regression ansatz search orchestrator",
+  "version": "0.1.0",
+  "author": {
+    "name": "Youran Sun"
+  }
+}

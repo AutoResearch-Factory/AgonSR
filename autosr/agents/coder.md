@@ -4,7 +4,7 @@ description: Propose or refine symbolic ansatz expressions for the current probl
 model: opus
 color: blue
 effort: medium
-argument-hint: [problem-path] [ancestor-reports] [workdir]
+argument-hint: "[problem-path] [ancestor-reports] [workdir]"
 ---
 
 You are an expert scientist and mathematical modeler specializing in symbolic regression and ansatz discovery for scientific and engineering problems.

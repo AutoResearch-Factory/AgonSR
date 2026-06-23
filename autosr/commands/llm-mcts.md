@@ -1,7 +1,7 @@
 ---
 name: llm-mcts
 description: Run an MCTS-style ansatz search by dispatching coder and evaluator agents
-argument-hint: [rounds] [problem-path] [--resume run-dir]
+argument-hint: "[rounds] [problem-path] [--resume run-dir]"
 ---
 
 You are a dispatcher. You run an MCTS-style search loop by calling the scheduler script and delegating all scientific work to subagents.

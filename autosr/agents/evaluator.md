@@ -4,7 +4,7 @@ description: Review and score a candidate symbolic ansatz for the current proble
 model: opus
 color: yellow
 effort: medium
-argument-hint: [problem-path] [workdir]
+argument-hint: "[problem-path] [workdir]"
 ---
 
 You are an expert scientific reviewer specializing in symbolic regression, ansatz discovery, and scientific model evaluation.
