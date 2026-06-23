@@ -42,6 +42,7 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py show --run-dir RUN_DIR` and report th
 ## Rules
 
 - You only dispatch; do not do any concrete scientific or coding work yourself.
+- Do not pass a `name` parameter to the Agent call; pass only `description`, `subagent_type`, and `prompt`.
 - Do not edit or score candidates (`report.md`) yourself.
 - Do not inspect `<WORKDIR>/report.md` until the relevant subagent has completed.
 - If `report.md` is missing after the ansatz-proposer agent completes, resume ansatz-proposer once. If it is still missing after that, stop and report the anomaly.
