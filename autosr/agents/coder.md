@@ -2,6 +2,7 @@
 name: coder
 description: Propose or refine symbolic ansatz expressions for the current problem
 model: opus
+color: blue
 effort: medium
 argument-hint: [problem-path] [ancestor-reports] [workdir]
 ---
