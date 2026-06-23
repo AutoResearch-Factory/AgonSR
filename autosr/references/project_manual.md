@@ -17,13 +17,12 @@ problem-workspace/
 ```
 runs/llm-mcts_YYMMDD_HHMM/
 ├── state.json
-└── candidates/
-    ├── 0001/
-    │   ├── report.md           # main report
-    │   └── ...                 # other artifacts
-    └── 0002/
-        ├── report.md
-        └── ...
+├── 0001/
+│   ├── report.md               # main report
+│   └── ...                     # other artifacts
+└── 0002/
+    ├── report.md
+    └── ...
 ```
 
 ## Report format
@@ -49,6 +48,19 @@ Summarize the evaluation results, including key metrics.
 </report template>
 
 Higher score is better. The report body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
+
+## Expression complexity
+
+When a problem asks for expression complexity, simplify the expression first and count tree leaves recursively.
+
+```
+LC(atom) = 1
+LC(expr) = 1 + sum(LC(arg) for arg in expr.args)
+```
+
+Use the smallest LeafCount among equivalent simplified forms.
+
+For $\sin^2(x)+\cos^2(x)+(x^2-1)/(x-1)$, `sympy.simplify` gives $x+2$, so the LeafCount is 3 instead of 20.
 
 ## File boundaries
 

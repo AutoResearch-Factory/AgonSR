@@ -33,12 +33,8 @@ def _state_path(run_dir: Path) -> Path:
     return run_dir / "state.json"
 
 
-def _candidates_dir(run_dir: Path) -> Path:
-    return run_dir / "candidates"
-
-
 def _candidate_dir(run_dir: Path, cid: str) -> Path:
-    return _candidates_dir(run_dir) / cid
+    return run_dir / cid
 
 
 def _report_path(run_dir: Path, cid: str) -> Path:
@@ -173,7 +169,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         run_dir = runs_dir / f"llm-mcts_{_now_stamp()}_{suffix}"
         suffix += 1
 
-    _candidates_dir(run_dir).mkdir(parents=True)
+    run_dir.mkdir(parents=True)
     state = {
         "method": "llm-mcts",
         "run_dir": str(run_dir),
@@ -195,6 +191,7 @@ def cmd_next(args: argparse.Namespace) -> None:
 
     for cid, node in sorted(state["nodes"].items()):
         if cid != ROOT_ID and node.get("status") == "pending":
+            _candidate_dir(run_dir, cid).mkdir(parents=True, exist_ok=True)
             _print_next(run_dir, cid)
             return
 
