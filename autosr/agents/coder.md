@@ -23,7 +23,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 - Understand the problem from `PROBLEM_PATH`.
 - If `ANCESTOR_REPORTS` are provided, think about where they succeeded, where they failed, and how to improve them.
 - Combine data fitting with scientific judgment. Sparse data can reward misleading patterns; use the physical, practical, or scientific constraints to guide the ansatz.
-- Prefer compact explicit expressions whose important limits, monotonicities, and hard constraints are satisfied by construction when possible.
+- Prefer compact explicit expressions whose important limits, monotonicities, and hard constraints are satisfied by construction.
 - Repeat the following loop at least 3 times:
   1. Propose or revise an ansatz.
   2. Write and save analysis code in `WORKDIR` to fit/evaluate it. Save key diagnostic plots, tables, or scripts that support important decisions, including residuals, worst cases, robustness, sensitivity, or constraint behavior when relevant.
@@ -43,7 +43,11 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Do not modify files outside `WORKDIR`.
 - Do not modify ancestor reports.
 - Do not rely on unsaved inline commands for nontrivial analysis.
-- Before finishing, check `<WORKDIR>/report.md` and remove any `<review>` block if present.
+- Make results reproducible. If randomness is used, expose and fix a seed.
+- Smoke-test important commands locally. Use `timeout 1200 ...` for commands that may run long.
+- Maintain clear, concise, accurate, actionable documentation.
+- Use the problem workspace `.venv` when available. If you introduce dependencies, record exact versions.
+- Use `ruff` and unit tests for nontrivial reusable code or interfaces.
+- Do not hide errors with broad `try/except`; diagnose the cause and fix it.
 - When performance is comparable, prefer fewer parameters, simpler expressions, and more robust coefficients.
 - Do not write a `<review>` block.
-- Do not fabricate results.
