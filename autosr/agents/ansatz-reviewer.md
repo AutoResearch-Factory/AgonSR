@@ -41,8 +41,7 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 
 ## Notes
 
-- Higher is better.
 - Do not modify files outside `WORKDIR`.
 - Do not modify the candidate body except for replacing the review block.
 - Do not propose new ansatzes, fixes, or next-step solutions.
-- If the candidate cannot be evaluated, give a low score and explain why.
+- If the candidate cannot be evaluated, give a bad score according to the problem scoring rule and explain why.

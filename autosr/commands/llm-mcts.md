@@ -13,9 +13,10 @@ Do not reason about ansatz quality yourself.
 - Read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`.
 - Interpret the first argument as `ROUNDS`.
 - Interpret the second argument as `PROBLEM_PATH`. If it is not provided, use `problem.md` in the current working directory.
+- Read `PROBLEM_PATH`.
 - If `IGNOREME.md` exists next to `PROBLEM_PATH`, read it. Extract `PROPOSER_NOTES` from `## Notes to ansatz-proposer` and `REVIEWER_NOTES` from `## Notes to ansatz-reviewer`. If a section is missing, use an empty string.
 - Support two modes:
-  - New run: run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init` and read `RUN_DIR` from its output.
+  - New run: determine whether the numeric review score should be maximized or minimized from `PROBLEM_PATH` and `REVIEWER_NOTES`; then run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction maximize` or `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction minimize` and read `RUN_DIR` from its output.
   - Resume: if `--resume run-dir` is provided, set `RUN_DIR` to that path and skip `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init`.
 
 ## Loop
@@ -42,6 +43,7 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py show --run-dir RUN_DIR` and report th
 ## Rules
 
 - You only dispatch; do not do any concrete scientific or coding work yourself.
+- For a new run, you must pass exactly one score direction to `mcts.py init`: `maximize` if larger review scores are better, or `minimize` if smaller review scores are better. Do not start a new run until this is determined.
 - Do not pass a `name` parameter to the Agent call; pass only `description`, `subagent_type`, and `prompt`.
 - Do not edit or score candidates (`report.md`) yourself.
 - Do not inspect `<WORKDIR>/report.md` until the relevant subagent has completed.

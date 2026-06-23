@@ -47,7 +47,7 @@ Summarize the evaluation results, including key metrics.
 
 </report template>
 
-Higher score is better. The report body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
+The report body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
 
 ## Expression complexity
 

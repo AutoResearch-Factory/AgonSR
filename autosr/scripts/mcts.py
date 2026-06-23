@@ -5,7 +5,7 @@ This script does not call LLMs and does not evaluate candidates.
 It only manages tree state and returns the next candidate workdir.
 
 Commands:
-  mcts.py init
+  mcts.py init --score-direction maximize|minimize
   mcts.py next --run-dir RUN_DIR
   mcts.py update --run-dir RUN_DIR --candidate-id ID --score X
   mcts.py show --run-dir RUN_DIR
@@ -75,20 +75,31 @@ def _score_history(state: dict) -> list[float]:
     return scores
 
 
-def _percentile_reward(score: float, scores: list[float]) -> float:
+def _score_direction(state: dict) -> str:
+    direction = state.get("config", {}).get("score_direction")
+    if direction not in {"maximize", "minimize"}:
+        raise SystemExit("missing or invalid config.score_direction in state.json")
+    return direction
+
+
+def _percentile_reward(score: float, scores: list[float], direction: str) -> float:
     if len(scores) <= 1:
         return 5.0
-    rank = sum(1 for s in scores if s <= score)
+    if direction == "maximize":
+        rank = sum(1 for s in scores if s <= score)
+    else:
+        rank = sum(1 for s in scores if s >= score)
     return 10.0 * rank / len(scores)
 
 
 def _node_rewards(state: dict) -> dict[str, float]:
+    direction = _score_direction(state)
     scores = _score_history(state)
     rewards: dict[str, float] = {}
     for cid, node in state["nodes"].items():
         if cid == ROOT_ID or node.get("score") is None:
             continue
-        rewards[cid] = _percentile_reward(float(node["score"]), scores)
+        rewards[cid] = _percentile_reward(float(node["score"]), scores, direction)
     return rewards
 
 
@@ -175,6 +186,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         "run_dir": str(run_dir),
         "next_candidate_num": 0,
         "config": {
+            "score_direction": args.score_direction,
             "ucb_c": args.ucb_c,
             "pw_k": args.pw_k,
             "pw_alpha": args.pw_alpha,
@@ -224,13 +236,15 @@ def cmd_update(args: argparse.Namespace) -> None:
 def cmd_show(args: argparse.Namespace) -> None:
     run_dir = Path(args.run_dir)
     state = _load_state(run_dir)
+    direction = _score_direction(state)
     rows = []
     for cid, node in state["nodes"].items():
         if cid == ROOT_ID or node.get("score") is None:
             continue
         rows.append((float(node["score"]), cid, node["depth"], str(_report_path(run_dir, cid))))
-    rows.sort(reverse=True)
+    rows.sort(key=lambda row: row[0], reverse=direction == "maximize")
     print(f"RUN_DIR: {run_dir}")
+    print(f"SCORE_DIRECTION: {direction}")
     print("TOP_CANDIDATES:")
     for score, cid, depth, report in rows[:10]:
         print(f"- {cid}: score={score:.4g} depth={depth} report={report}")
@@ -241,6 +255,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init")
+    p_init.add_argument("--score-direction", required=True, choices=("maximize", "minimize"))
     p_init.add_argument("--ucb-c", type=float, default=DEFAULT_UCB_C)
     p_init.add_argument("--pw-k", type=float, default=DEFAULT_PW_K)
     p_init.add_argument("--pw-alpha", type=float, default=DEFAULT_PW_ALPHA)
