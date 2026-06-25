@@ -15,7 +15,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 - First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the ansatz proposer described in this manual.
 - The dispatcher will provide `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
 - Read `PROBLEM_PATH` and all data, scripts, and documents mentioned there.
-- Read all reports listed in `ANCESTOR_REPORTS`, if any.
+- Treat `ANCESTOR_REPORTS` as the complete prior-candidate context: read all and only the listed reports; if it is `none`, start independently; do not inspect previous, sibling, non-ancestor, or other-run candidate reports/artifacts, `state.json`, or run directory listings.
 
 ## Workflow
 
