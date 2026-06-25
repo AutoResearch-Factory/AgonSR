@@ -37,8 +37,8 @@ def _candidate_dir(run_dir: Path, cid: str) -> Path:
     return run_dir / cid
 
 
-def _report_path(run_dir: Path, cid: str) -> Path:
-    return _candidate_dir(run_dir, cid) / "report.md"
+def _ansatz_path(run_dir: Path, cid: str) -> Path:
+    return _candidate_dir(run_dir, cid) / "ansatz.md"
 
 
 def _load_state(run_dir: Path) -> dict:
@@ -169,7 +169,7 @@ def _print_next(run_dir: Path, cid: str) -> None:
     labels = {0: "ancestor 1 (father)", 1: "ancestor 2 (grandfather)"}
     for i, aid in enumerate(ancestors):
         label = labels.get(i, f"ancestor {i + 1}")
-        print(f"- {label}: {_report_path(run_dir, aid)}")
+        print(f"- {label}: {_ansatz_path(run_dir, aid)}")
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -241,13 +241,13 @@ def cmd_show(args: argparse.Namespace) -> None:
     for cid, node in state["nodes"].items():
         if cid == ROOT_ID or node.get("score") is None:
             continue
-        rows.append((float(node["score"]), cid, node["depth"], str(_report_path(run_dir, cid))))
+        rows.append((float(node["score"]), cid, node["depth"], str(_ansatz_path(run_dir, cid))))
     rows.sort(key=lambda row: row[0], reverse=direction == "maximize")
     print(f"RUN_DIR: {run_dir}")
     print(f"SCORE_DIRECTION: {direction}")
     print("TOP_CANDIDATES:")
-    for score, cid, depth, report in rows[:10]:
-        print(f"- {cid}: score={score:.4g} depth={depth} report={report}")
+    for score, cid, depth, ansatz in rows[:10]:
+        print(f"- {cid}: score={score:.4g} depth={depth} ansatz={ansatz}")
 
 
 def main() -> None:

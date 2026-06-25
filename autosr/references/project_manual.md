@@ -18,16 +18,16 @@ problem-workspace/
 runs/llm-mcts_YYMMDD_HHMM/
 ├── state.json
 ├── 0001/
-│   ├── report.md               # main report
+│   ├── ansatz.md               # main ansatz file
 │   └── ...                     # other artifacts
 └── 0002/
-    ├── report.md
+    ├── ansatz.md
     └── ...
 ```
 
-## Report format
+## Ansatz file format
 
-<report template>
+<ansatz template>
 
 ## One sentence
 
@@ -45,9 +45,9 @@ Summarize the evaluation results, including key metrics.
 ...
 </review>
 
-</report template>
+</ansatz template>
 
-The report body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
+The ansatz file body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
 
 ## Expression complexity
 
@@ -69,5 +69,5 @@ Agents may modify only the current `WORKDIR`.
 Do not modify:
 - other candidates
 - other runs
-- ancestor reports
+- ancestor ansatz files
 - files outside `WORKDIR`

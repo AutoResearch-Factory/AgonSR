@@ -23,7 +23,7 @@ Resume an existing run:
 
 ## `problem.md`
 
-`problem.md` should contain the actual problem definition: objective, variables, data/docs/scripts to read, constraints, evaluation method, scoring rubric, and expected report contents. Use paths relative to the problem workspace.
+`problem.md` should contain the actual problem definition: objective, variables, data/docs/scripts to read, constraints, evaluation method, scoring rubric, and expected `ansatz.md` contents. Use paths relative to the problem workspace.
 
 ## `IGNOREME.md`
 
@@ -43,6 +43,6 @@ The dispatcher reads this file and passes each section only to the corresponding
 
 ## Pipeline
 
-`llm-mcts` is only a dispatcher. It initializes or resumes a run, asks `mcts.py next` for the next candidate, sends fixed minimal prompts to `ansatz-proposer` and `ansatz-reviewer`, reads the `<review score="X">` block from `report.md`, calls `mcts.py update`, and finally shows the best candidates.
+`llm-mcts` is only a dispatcher. It initializes or resumes a run, asks `mcts.py next` for the next candidate, sends fixed minimal prompts to `ansatz-proposer` and `ansatz-reviewer`, reads the `<review score="X">` block from `ansatz.md`, calls `mcts.py update`, and finally shows the best candidates.
 
-Run files are written under `runs/`. See `autosr/references/project_manual.md` for the exact workspace and report conventions.
+Run files are written under `runs/`. See `autosr/references/project_manual.md` for the exact workspace and ansatz-file conventions.

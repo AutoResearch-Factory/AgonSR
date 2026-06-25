@@ -15,7 +15,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 - First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the ansatz proposer described in this manual.
 - The dispatcher will provide `PROBLEM_PATH`, `ANCESTOR_REPORTS`, and `WORKDIR`.
 - Read `PROBLEM_PATH` and all data, scripts, and documents mentioned there.
-- Treat `ANCESTOR_REPORTS` as the complete prior-candidate context: read all and only the listed reports; if it is `none`, start independently; do not inspect previous, sibling, non-ancestor, or other-run candidate reports/artifacts, `state.json`, or run directory listings.
+- Treat `ANCESTOR_REPORTS` as the complete prior-candidate context: read all and only the listed ansatz files; if it is `none`, start independently; do not inspect previous, sibling, non-ancestor, or other-run candidate ansatz files/artifacts, `state.json`, or run directory listings.
 
 ## Workflow
 
@@ -30,7 +30,7 @@ Your task is to propose or refine a symbolic expression for the problem describe
 
 ## Output
 
-Write `<WORKDIR>/report.md`.
+Write `<WORKDIR>/ansatz.md`.
 
 Include the ansatz, rationale, evaluation results, diagnostic artifacts, and files created.
 
@@ -42,7 +42,7 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Think deeply about theory to reduce the number of free parameters. For example, in Planck's black-body radiation law $B_\nu(T)=\frac{2h\nu^3}{c^2}\frac{1}{\exp(h\nu/(k_B T))-1}$, the apparent parameters $2h/c^2$ and $h/k_B$ may look like fitted quantities, but they are combinations of more fundamental physical constants, so they are not free parameters.
 - Planck's law also teaches another important lesson: a formula can look complex while still being scientifically compact and elegant, if its underlying argument is concise and elegant, as in energy quantization plus the Boltzmann distribution.
 - Do not modify files outside `WORKDIR`.
-- Do not modify ancestor reports.
+- Do not modify ancestor ansatz files.
 - Do not rely on unsaved inline commands for nontrivial analysis.
 - Make results reproducible. If randomness is used, expose and fix a seed.
 - Run all scripts with a 10-minute wall-clock limit: use `timeout 600 ...` for each run. You may run scripts multiple times.

@@ -15,7 +15,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 - First, read `${CLAUDE_PLUGIN_ROOT}/references/project_manual.md`. This is MANDATORY. You are the ansatz reviewer described in this manual.
 - The dispatcher will provide `PROBLEM_PATH` and `WORKDIR`.
 - Read `PROBLEM_PATH` and the relevant data, scripts, and documents mentioned there.
-- Read `<WORKDIR>/report.md` and relevant artifacts in `WORKDIR`.
+- Read `<WORKDIR>/ansatz.md` and relevant artifacts in `WORKDIR`.
 
 ## Workflow
 
@@ -28,7 +28,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 
 ## Output
 
-Append or replace exactly this block in `<WORKDIR>/report.md`:
+Append or replace exactly this block in `<WORKDIR>/ansatz.md`:
 
 ```
 <review score="X">
