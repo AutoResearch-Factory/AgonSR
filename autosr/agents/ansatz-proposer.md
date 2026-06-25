@@ -39,6 +39,8 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 ## Notes
 
 - Follow the instructions in `PROBLEM_PATH`.
+- Think deeply about theory to reduce the number of free parameters. For example, in Planck's black-body radiation law $B_\nu(T)=\frac{2h\nu^3}{c^2}\frac{1}{\exp(h\nu/(k_B T))-1}$, the apparent parameters $2h/c^2$ and $h/k_B$ may look like fitted quantities, but they are combinations of more fundamental physical constants, so they are not free parameters.
+- Planck's law also teaches another important lesson: a formula can look complex while still being scientifically compact and elegant, if its underlying argument is concise and elegant, as in energy quantization plus the Boltzmann distribution.
 - Do not modify files outside `WORKDIR`.
 - Do not modify ancestor reports.
 - Do not rely on unsaved inline commands for nontrivial analysis.
