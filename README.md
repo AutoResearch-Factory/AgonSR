@@ -2,6 +2,7 @@
 
 AutoSR is a Claude Code plugin for symbolic ansatz search.
 Problems and generated artifacts live outside the plugin, usually in a problem workspace such as `artifacts/pile_efficiency/`.
+The [`artifacts/`](https://github.com/WhymustIhaveaname/AutoSR-artifacts) directory is a separate git submodule/repo for problem workspaces, data, runs, and generated outputs.
 
 ## Start Claude Code with the plugin
 
@@ -9,15 +10,15 @@ From a problem workspace:
 
 ```
 cd /path/to/problem-workspace
-claude --plugin-dir /path/to/AutoSR/autosr
+claude --plugin-dir /path/to/AutoSR/autosr --dangerously-skip-permissions
 ```
 
-Then run `/llm-mcts 20 problem.md`.
+Then run `/llm-mcts 10 problem.md`.
 
 Resume an existing run:
 
 ```
-/llm-mcts 20 problem.md --resume runs/llm-mcts_YYMMDD_HHMM
+/llm-mcts 10 problem.md --resume runs/llm-mcts_YYMMDD_HHMM
 ```
 
 ## `problem.md`
