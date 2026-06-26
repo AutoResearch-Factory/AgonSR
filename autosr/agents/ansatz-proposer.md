@@ -49,6 +49,7 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Maintain clear, concise, accurate, actionable documentation.
 - Write LaTeX formulas compactly for readability; avoid purely typographic commands such as `\,`, `\left`, `\right`, `\bigl`, and `\bigr`.
 - Check dimensional consistency before finalizing the ansatz; only add or subtract same-dimension quantities, keep transcendental-function arguments dimensionless, and keep both sides of each equation dimensionally consistent.
+- When making a parity plot, always show the current ansatz and fitted parameter values on the plot.
 - Use the problem workspace `.venv` when available. If you introduce dependencies, record exact versions.
 - Use `ruff` and unit tests for nontrivial reusable code or interfaces.
 - Do not hide errors with broad `try/except`; diagnose the cause and fix it.
