@@ -9,6 +9,7 @@ Commands:
   mcts.py next --run-dir RUN_DIR
   mcts.py update --run-dir RUN_DIR --candidate-id ID --score X
   mcts.py show --run-dir RUN_DIR
+  mcts.py tree --run-dir RUN_DIR
 """
 
 from __future__ import annotations
@@ -16,11 +17,12 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 
 ROOT_ID = "root"
-DEFAULT_UCB_C = 1.41421356237
+DEFAULT_UCB_C = 10.0
 DEFAULT_PW_K = 1.0
 DEFAULT_PW_ALPHA = 0.5
 
@@ -172,6 +174,50 @@ def _print_next(run_dir: Path, cid: str) -> None:
         print(f"- {label}: {_ansatz_path(run_dir, aid)}")
 
 
+def _format_score(score: object) -> str:
+    if score is None:
+        return "pending"
+    return f"{float(score):.4g}"
+
+
+def _looks_like_formula(text: str) -> bool:
+    return any(token in text for token in ("=", "_", "^", "\\frac", "\\sqrt", "\\exp", "\\log(", "\\max(", "\\min(", "|"))
+
+
+def _candidate_formula(run_dir: Path, cid: str) -> str:
+    for name in ("ansatz.md", "report.md"):
+        path = _candidate_dir(run_dir, cid) / name
+        if not path.exists():
+            continue
+        text = path.read_text(errors="ignore")
+        match = re.search(r"^## One sentence\s*(.*?)(?=^## |\Z)", text, re.M | re.S)
+        section = match.group(1) if match else text
+        formulas = []
+        formulas.extend(re.findall(r"\$\$(.*?)\$\$", section, re.S))
+        formulas.extend(re.findall(r"\\\((.*?)\\\)", section, re.S))
+        formulas.extend(re.findall(r"(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)", section, re.S))
+        formulas = [re.sub(r"\s+", " ", f).strip() for f in formulas]
+        formulas = [f for f in formulas if f and _looks_like_formula(f)]
+        return "; ".join(formulas) if formulas else "no formula"
+    return "missing ansatz"
+
+
+def _print_tree_node(
+    state: dict, run_dir: Path, node_id: str, prefix: str = "", is_last: bool = True
+) -> None:
+    node = state["nodes"][node_id]
+    if node_id == ROOT_ID:
+        print("root")
+    else:
+        label = f"{node_id} score={_format_score(node.get('score'))} | {_candidate_formula(run_dir, node_id)}"
+        connector = "└── " if is_last else "├── "
+        print(prefix + connector + label)
+
+    children = node.get("children", [])
+    child_prefix = prefix if node_id == ROOT_ID else prefix + ("    " if is_last else "│   ")
+    for i, child_id in enumerate(children):
+        _print_tree_node(state, run_dir, child_id, child_prefix, i == len(children) - 1)
+
 def cmd_init(args: argparse.Namespace) -> None:
     runs_dir = Path("runs")
     run_dir = runs_dir / f"llm-mcts_{_now_stamp()}"
@@ -250,6 +296,14 @@ def cmd_show(args: argparse.Namespace) -> None:
         print(f"- {cid}: score={score:.4g} depth={depth} ansatz={ansatz}")
 
 
+def cmd_tree(args: argparse.Namespace) -> None:
+    run_dir = Path(args.run_dir)
+    state = _load_state(run_dir)
+    print(f"RUN_DIR: {run_dir}")
+    print(f"SCORE_DIRECTION: {_score_direction(state)}")
+    _print_tree_node(state, run_dir, ROOT_ID)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -274,6 +328,10 @@ def main() -> None:
     p_show = sub.add_parser("show")
     p_show.add_argument("--run-dir", required=True)
     p_show.set_defaults(func=cmd_show)
+
+    p_tree = sub.add_parser("tree")
+    p_tree.add_argument("--run-dir", required=True)
+    p_tree.set_defaults(func=cmd_tree)
 
     args = parser.parse_args()
     args.func(args)
