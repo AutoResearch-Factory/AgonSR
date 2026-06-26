@@ -49,6 +49,10 @@ Summarize the evaluation results, including key metrics.
 
 The ansatz file body is written by the ansatz proposer; the review block is written by the ansatz reviewer.
 
+## Dimensional consistency
+
+Only add or subtract quantities with the same dimensions. Arguments of `exp`, `log`, `sin`, `cos`, and similar functions must be dimensionless. Both sides of an equation must have the same dimensions. Fitted scalar coefficients may carry units unless `PROBLEM_PATH` says they must be dimensionless.
+
 ## Expression complexity
 
 When a problem asks for expression complexity, simplify the expression first and count tree leaves recursively.

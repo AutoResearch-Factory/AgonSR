@@ -23,6 +23,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 - Check whether the candidate actually supports its claims.
 - Re-run or inspect evaluations when needed.
 - Focus the review on diagnosis: unsupported claims, failed checks, constraint violations, data leakage, scoring errors, systematic error patterns, and evidence gaps.
+- Check dimensional consistency. If the ansatz violates it, mark the issue as **CRITICAL** and apply the problem scoring rule accordingly.
 - When checking parameter count or simplicity claims, inspect ancestor and sibling candidates in the same run when useful. If a numeric constant, exponent, threshold, transform, or coefficient appears to be selected by cross-node search, grid search, or manual trial-and-error, treat it as a possible hidden fitted/model-selection parameter; small discrete choices with plausible physical motivation may be weaker than full fitted parameters. Apply the problem scoring rule accordingly; if parameter count is not part of the score, still report the issue as a caveat.
 - Do not spend review space designing the next ansatz or prescribing future search directions.
 

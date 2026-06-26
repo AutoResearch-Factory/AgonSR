@@ -48,6 +48,7 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Run all scripts with a 10-minute wall-clock limit: use `timeout 600 ...` for each run. You may run scripts multiple times.
 - Maintain clear, concise, accurate, actionable documentation.
 - Write LaTeX formulas compactly for readability; avoid purely typographic commands such as `\,`, `\left`, `\right`, `\bigl`, and `\bigr`.
+- Check dimensional consistency before finalizing the ansatz; only add or subtract same-dimension quantities, keep transcendental-function arguments dimensionless, and keep both sides of each equation dimensionally consistent.
 - Use the problem workspace `.venv` when available. If you introduce dependencies, record exact versions.
 - Use `ruff` and unit tests for nontrivial reusable code or interfaces.
 - Do not hide errors with broad `try/except`; diagnose the cause and fix it.
