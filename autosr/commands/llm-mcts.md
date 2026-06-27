@@ -16,18 +16,19 @@ Do not reason about ansatz quality yourself.
 - Read `PROBLEM_PATH`.
 - If `IGNOREME.md` exists next to `PROBLEM_PATH`, read it. Extract `PROPOSER_NOTES` from `## Notes to ansatz-proposer` and `REVIEWER_NOTES` from `## Notes to ansatz-reviewer`. If a section is missing, use an empty string.
 - Support two modes:
-  - New run: determine whether the numeric review score should be maximized or minimized from `PROBLEM_PATH` and `REVIEWER_NOTES`; then run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction maximize` or `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction minimize` and read `RUN_DIR` from its output.
-  - Resume: if `--resume run-dir` is provided, set `RUN_DIR` to that path and skip `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init`.
+  - New run: set `RESUME_MODE=false`; determine whether the numeric review score should be maximized or minimized from `PROBLEM_PATH` and `REVIEWER_NOTES`; then run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction maximize` or `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction minimize` and read `RUN_DIR` from its output.
+  - Resume: if `--resume run-dir` is provided, set `RESUME_MODE=true`, set `RUN_DIR` to that path, and skip `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init`.
 
 ## Loop
 
 Repeat `ROUNDS` times:
 
 1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py next --run-dir RUN_DIR`, then read `CANDIDATE_ID`, `WORKDIR`, and `ANCESTOR_REPORTS` from its output.
-2. Call the `autosr:ansatz-proposer` agent using exactly the Ansatz Proposer prompt template, and wait for the ansatz-proposer agent to complete before doing anything else.
-3. Call the `autosr:ansatz-reviewer` agent using exactly the Ansatz Reviewer prompt template, and wait for the ansatz-reviewer agent to complete before doing anything else.
-4. Read `<WORKDIR>/ansatz.md` and extract the score from its `<review score="X">` block.
-5. Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py update --run-dir RUN_DIR --candidate-id CANDIDATE_ID --score SCORE`.
+2. If `RESUME_MODE=true`, clean only the candidate directory returned by `mcts.py next` for this `CANDIDATE_ID`: if `WORKDIR` is not empty, move all existing contents of that `WORKDIR` into `<WORKDIR>/_dirty_YYMMDD_HHMM/`. Do not touch any other candidate or run. Do not inspect, merge, or reuse dirty contents.
+3. Call the `autosr:ansatz-proposer` agent using exactly the Ansatz Proposer prompt template, and wait for the ansatz-proposer agent to complete before doing anything else.
+4. Call the `autosr:ansatz-reviewer` agent using exactly the Ansatz Reviewer prompt template, and wait for the ansatz-reviewer agent to complete before doing anything else.
+5. Read `<WORKDIR>/ansatz.md` and extract the score from its `<review score="X">` block.
+6. Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py update --run-dir RUN_DIR --candidate-id CANDIDATE_ID --score SCORE`.
 
 ### Subagent prompt templates
 
