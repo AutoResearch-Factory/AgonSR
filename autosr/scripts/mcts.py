@@ -181,7 +181,8 @@ def _format_score(score: object) -> str:
 
 
 def _looks_like_formula(text: str) -> bool:
-    return any(token in text for token in ("=", "_", "^", "\\frac", "\\sqrt", "\\exp", "\\log(", "\\max(", "\\min(", "|"))
+    tokens = ("=", "_", "^", "\\frac", "\\sqrt", "\\exp", "\\log(", "\\max(", "\\min(", "|")
+    return any(token in text for token in tokens)
 
 
 def _candidate_formula(run_dir: Path, cid: str) -> str:
@@ -202,21 +203,113 @@ def _candidate_formula(run_dir: Path, cid: str) -> str:
     return "missing ansatz"
 
 
-def _print_tree_node(
-    state: dict, run_dir: Path, node_id: str, prefix: str = "", is_last: bool = True
-) -> None:
+def _tree_lines(state: dict, run_dir: Path, node_id: str, prefix: str = "", is_last: bool = True) -> list[str]:
     node = state["nodes"][node_id]
     if node_id == ROOT_ID:
-        print("root")
+        lines = ["root"]
     else:
         label = f"{node_id} score={_format_score(node.get('score'))} | {_candidate_formula(run_dir, node_id)}"
         connector = "└── " if is_last else "├── "
-        print(prefix + connector + label)
+        lines = [prefix + connector + label]
 
     children = node.get("children", [])
     child_prefix = prefix if node_id == ROOT_ID else prefix + ("    " if is_last else "│   ")
     for i, child_id in enumerate(children):
-        _print_tree_node(state, run_dir, child_id, child_prefix, i == len(children) - 1)
+        lines.extend(_tree_lines(state, run_dir, child_id, child_prefix, i == len(children) - 1))
+    return lines
+
+
+def _sanitize_mathtext(formula: str) -> str:
+    formula = re.sub(r"\s+", " ", formula).strip()
+    formula = formula.replace("\\tfrac", "\\frac").replace("\\dfrac", "\\frac")
+    formula = re.sub(r"\\(?:left|right|bigl|bigr|Bigl|Bigr|big|Big)\s*", "", formula)
+    formula = re.sub(r"\\[,;:!]", "", formula)
+    formula = re.sub(r"\\(?:quad|qquad)\s*", " ", formula)
+    formula = re.sub(r"\\text\s*\{([^{}]*)\}", r"\\mathrm{\1}", formula)
+    formula = re.sub(r"\\operatorname\s*\{([^{}]*)\}", r"\\mathrm{\1}", formula)
+    formula = re.sub(r"(?<!\\)%", r"\\%", formula)
+    return formula
+
+
+def _render_formula(formula: str, parser: object) -> str:
+    rendered = _sanitize_mathtext(formula)
+    try:
+        parser.parse(f"${rendered}$", dpi=120)
+    except Exception:
+        return formula
+    return f"${rendered}$"
+
+
+def _image_line(line: str, parser: object) -> str:
+    if " | " not in line:
+        return line
+    head, formula_text = line.split(" | ", 1)
+    if formula_text in {"missing ansatz", "no formula"}:
+        return line
+    formulas = [f.strip() for f in re.split(r"(?<!\\);", formula_text) if f.strip()]
+    if not formulas:
+        return line
+    return f"{head} | " + "; ".join(_render_formula(formula, parser) for formula in formulas)
+
+
+def _save_tree_image(run_dir: Path, lines: list[str]) -> Path | None:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.mathtext import MathTextParser
+    except Exception as exc:
+        print(f"TREE_IMAGE: skipped ({exc})")
+        return None
+
+    parser = MathTextParser("path")
+    image_lines = [_image_line(line, parser) for line in lines]
+    row_height = 0.34
+    fig_height = max(2.0, row_height * len(image_lines) + 0.4)
+    fig_width = 12.0
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    ax.axis("off")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, len(image_lines))
+    for i, line in enumerate(image_lines):
+        y = len(image_lines) - i - 0.75
+        ax.text(
+            0.01,
+            y,
+            line,
+            fontsize=9,
+            fontfamily="DejaVu Sans Mono",
+            va="center",
+            ha="left",
+            clip_on=False,
+        )
+    image_path = run_dir / "tree.png"
+    try:
+        fig.savefig(image_path, dpi=200, bbox_inches="tight", pad_inches=0.2)
+    except Exception:
+        plt.close(fig)
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+        ax.axis("off")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, len(lines))
+        for i, line in enumerate(lines):
+            y = len(lines) - i - 0.75
+            ax.text(
+                0.01,
+                y,
+                line,
+                fontsize=9,
+                fontfamily="DejaVu Sans Mono",
+                va="center",
+                ha="left",
+                clip_on=False,
+            )
+        fig.savefig(image_path, dpi=200, bbox_inches="tight", pad_inches=0.2)
+    finally:
+        plt.close(fig)
+    return image_path
+
 
 def cmd_init(args: argparse.Namespace) -> None:
     runs_dir = Path("runs")
@@ -301,7 +394,12 @@ def cmd_tree(args: argparse.Namespace) -> None:
     state = _load_state(run_dir)
     print(f"RUN_DIR: {run_dir}")
     print(f"SCORE_DIRECTION: {_score_direction(state)}")
-    _print_tree_node(state, run_dir, ROOT_ID)
+    lines = _tree_lines(state, run_dir, ROOT_ID)
+    for line in lines:
+        print(line)
+    image_path = _save_tree_image(run_dir, lines)
+    if image_path is not None:
+        print(f"TREE_IMAGE: {image_path}")
 
 
 def main() -> None:
