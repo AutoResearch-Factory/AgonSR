@@ -1,3 +1,5 @@
 [submodule "artifacts"]
 	path = artifacts
 	url = git@github.com:WhymustIhaveaname/AutoSR-artifacts.git
+	branch = main
+	ignore = all

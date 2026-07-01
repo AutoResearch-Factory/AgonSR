@@ -20,7 +20,7 @@ Your task is to review the candidate ansatz in `WORKDIR` according to the proble
 ## Workflow
 
 - Understand the problem, constraints, and evaluation criteria from `PROBLEM_PATH`.
-- Check whether the candidate actually supports its claims.
+- Check whether the candidate actually supports its claims, including whether reported metrics and score components match the definitions in `PROBLEM_PATH` rather than merely reproducing the candidate's code; be especially alert to ambiguous metric names such as `L2` (e.g. RMSE/norm vs MSE).
 - Re-run or inspect evaluations when needed.
 - Focus the review on diagnosis: unsupported claims, failed checks, constraint violations, data leakage, scoring errors, systematic error patterns, and evidence gaps.
 - Check dimensional consistency. If the ansatz violates it, mark the issue as **CRITICAL** and apply the problem scoring rule accordingly.

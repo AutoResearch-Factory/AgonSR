@@ -36,11 +36,17 @@ Include the ansatz, rationale, evaluation results, diagnostic artifacts, and fil
 
 Finally, briefly report: what you did, what difficulties you hit, how you resolved them (or didn't), and any open questions.
 
-## Notes
+## Modeling & Fitting Principles
 
-- Follow the instructions in `PROBLEM_PATH`.
+- When performance is comparable, prefer fewer parameters, simpler expressions, and more robust coefficients.
+- Check dimensional consistency before finalizing the ansatz; only add or subtract same-dimension quantities, keep transcendental-function arguments dimensionless, and keep both sides of each equation dimensionally consistent.
 - Think deeply about theory to reduce the number of free parameters. For example, in Planck's black-body radiation law $B_\nu(T)=\frac{2h\nu^3}{c^2}\frac{1}{\exp(h\nu/(k_B T))-1}$, the apparent parameters $2h/c^2$ and $h/k_B$ may look like fitted quantities, but they are combinations of more fundamental physical constants, so they are not free parameters.
 - Planck's law also teaches another important lesson: a formula can look complex while still being scientifically compact and elegant, if its underlying argument is concise and elegant, as in energy quantization plus the Boltzmann distribution.
+- The same symbolic formula can yield different fitted parameters, predictive behavior, and numerical stability under different fitting objectives or algebraic transformations. Do not assume there is one canonical implementation: actively invent and test multiple mathematically reasonable fitting formulations for each ansatz. For example, for a data scaling law $L(D)=L_0+(D/D_c)^{-\beta}$ with fitted parameters $L_0$, $D_c$, and $\beta$, the candidate formulations include at least, but are not limited to, directly fitting $L-L_0-(D/D_c)^{-\beta}$, fitting $\log L-\log(L_0+(D/D_c)^{-\beta})$, and fitting $\log(L-L_0)+\beta\log(D/D_c)$ when valid. Treat these examples as a lower bound and use scientific and numerical judgment to propose additional valid transformations, parameterizations, weighting schemes, staged fits, robust losses, constraints, or priors when appropriate. Analyze each formulation's conditioning, stability, residual behavior, uncertainty/CI, and failure modes; with ill-conditioned data, some formulations may give biased or even wrong coefficients. Report the best-supported result and explain why its fitting formulation is preferred.
+
+## Execution & Reproducibility Rules
+
+- Follow the instructions in `PROBLEM_PATH`.
 - Do not modify files outside `WORKDIR`.
 - Do not modify ancestor ansatz files.
 - Do not rely on unsaved inline commands for nontrivial analysis.
@@ -48,10 +54,8 @@ Finally, briefly report: what you did, what difficulties you hit, how you resolv
 - Run all scripts with a 10-minute wall-clock limit: use `timeout 600 ...` for each run. You may run scripts multiple times.
 - Maintain clear, concise, accurate, actionable documentation.
 - Write LaTeX formulas compactly for readability; avoid purely typographic commands such as `\,`, `\left`, `\right`, `\bigl`, and `\bigr`.
-- Check dimensional consistency before finalizing the ansatz; only add or subtract same-dimension quantities, keep transcendental-function arguments dimensionless, and keep both sides of each equation dimensionally consistent.
 - When making a parity plot, always show the current ansatz and fitted parameter values on the plot.
 - Use the problem workspace `.venv` when available. If you introduce dependencies, record exact versions.
 - Use `ruff` and unit tests for nontrivial reusable code or interfaces.
 - Do not hide errors with broad `try/except`; diagnose the cause and fix it.
-- When performance is comparable, prefer fewer parameters, simpler expressions, and more robust coefficients.
 - Do not write a `<review>` block.
