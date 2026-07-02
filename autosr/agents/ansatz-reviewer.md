@@ -37,6 +37,8 @@ Append or replace exactly this block in `<WORKDIR>/ansatz.md`:
 </review>
 ```
 
+Here `X` is the final total score under the problem's scoring rule, not a subtotal or component score. Before you finish, check that `score="X"`, the final score stated in the review, and the component sum all agree.
+
 Put all review content inside this block. Do not write `## Ansatz Reviewer Review` or any review text outside it.
 
 Finally, briefly report: what you did, what difficulties you hit, how you resolved them (or didn't), and any open questions.
