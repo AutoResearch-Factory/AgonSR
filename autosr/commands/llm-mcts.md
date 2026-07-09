@@ -15,6 +15,7 @@ Do not reason about ansatz quality yourself.
 - Interpret the second argument as `PROBLEM_PATH`. If it is not provided, use `problem.md` in the current working directory.
 - Read `PROBLEM_PATH`.
 - If `IGNOREME.md` exists next to `PROBLEM_PATH`, read it. Extract `PROPOSER_NOTES` from `## Notes to ansatz-proposer` and `REVIEWER_NOTES` from `## Notes to ansatz-reviewer`. If a section is missing, use an empty string.
+- If `IGNOREME.md` contains a `## Notes to dispatcher` section, read it as well — these are special instructions for you.
 - Support two modes:
   - New run: set `RESUME_MODE=false`; determine whether the numeric review score should be maximized or minimized from `PROBLEM_PATH` and `REVIEWER_NOTES`; then run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction maximize` or `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init --score-direction minimize` and read `RUN_DIR` from its output.
   - Resume: if `--resume run-dir` is provided, set `RESUME_MODE=true`, set `RUN_DIR` to that path, and skip `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py init`.

@@ -32,11 +32,10 @@ Optional. Put special per-role notes here when they should not live in the gener
 ```
 ## Notes to ansatz-proposer
 
-...
-
 ## Notes to ansatz-reviewer
 
-...
+## Notes to dispatcher
+
 ```
 
 The dispatcher reads this file and passes each section only to the corresponding subagent.
