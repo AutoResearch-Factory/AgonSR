@@ -10,7 +10,7 @@ From a problem workspace:
 
 ```
 cd /path/to/problem-workspace
-claude --plugin-dir /path/to/AutoSR/autosr --dangerously-skip-permissions
+claude --plugin-dir /path/to/AutoSR/autosr --dangerously-skip-permissions --model claude-sonnet-5[1m]
 ```
 
 Then run `/llm-mcts 10 problem.md`.

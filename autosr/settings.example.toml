@@ -1,0 +1,6 @@
+# AgonSR local settings
+model_routing_policy = "'|' 表示使用 Bresenham's line algorithm 分配 backend/model, 保证长期比例纠偏到目标权重"
+
+parallelism     = 1 # Max concurrent runs
+ansatz-proposer-model = "codex"
+ansatz-reviewer-model = "codex"
