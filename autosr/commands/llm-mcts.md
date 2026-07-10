@@ -37,8 +37,16 @@ Repeat `ROUNDS` times:
 
 When dispatching subagents, send exactly the template below. Do not add advice, analysis, summaries, or extra instructions.
 
-- Ansatz Proposer task prompt: `PROBLEM_PATH: {PROBLEM_PATH}, ANCESTOR_REPORTS: {ANCESTOR_REPORTS}, WORKDIR: {WORKDIR}, Special notes from user: {PROPOSER_NOTES}`
-- Ansatz Reviewer task prompt: `PROBLEM_PATH: {PROBLEM_PATH}, WORKDIR: {WORKDIR}, Special notes from user: {REVIEWER_NOTES}`
+- Ansatz Proposer task prompt: `CLAUDE_PLUGIN_ROOT: ${CLAUDE_PLUGIN_ROOT}, PROBLEM_PATH: {PROBLEM_PATH}, ANCESTOR_REPORTS: {ANCESTOR_REPORTS}, WORKDIR: {WORKDIR}, Special notes from user: {PROPOSER_NOTES}`
+- Ansatz Reviewer task prompt: `CLAUDE_PLUGIN_ROOT: ${CLAUDE_PLUGIN_ROOT}, PROBLEM_PATH: {PROBLEM_PATH}, WORKDIR: {WORKDIR}, Special notes from user: {REVIEWER_NOTES}`
+
+## Cron 与防止 idle
+
+- 你要保证任何时刻至少有一个 subagent 在干活
+- 为了杜绝你意外 idle 的情况 (which 偶尔就会发生), 你要用 `CronCreate` 排一个 1h 的唤醒, 提示词: "<reminder> 是否有 subagent 在工作? 是否有 agent 卡住了?"
+- Cron 要设置 `durable: false`, 因为不需要跨 session 保持. 1h 唤醒 Cron 的分钟字段用当前时刻的分钟数
+- "agent 卡住了" 是指有 agent session wall-clock > 1h, 此时需要关注它是不是出了什么问题.
+- 如果触发了 usage limit, 等待 3h 之后再继续
 
 ## Finish
 
@@ -48,7 +56,7 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/mcts.py show --run-dir RUN_DIR` and report th
 
 - You only dispatch; do not do any concrete scientific or coding work yourself.
 - For a new run, you must pass exactly one score direction to `mcts.py init`: `maximize` if larger review scores are better, or `minimize` if smaller review scores are better. Do not start a new run until this is determined.
-- Do not pass a `name` parameter to the Agent call; pass only `description`, `subagent_type`, and `prompt`.
+- 所有 subagent 均依照 dispatch_manual 记录的方法用 shell 调用, 所有 subagent 都在 WORKDIR 下启动.
 - Do not edit or score candidates (`ansatz.md`) yourself.
 - Do not inspect `<WORKDIR>/ansatz.md` until the relevant subagent has completed.
 - If `ansatz.md` is missing after the ansatz-proposer agent completes, resume ansatz-proposer once. If it is still missing after that, stop and report the anomaly.
