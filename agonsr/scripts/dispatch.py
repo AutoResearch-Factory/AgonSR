@@ -215,8 +215,8 @@ class TranscriptTail:
         self.poll()  # final drain — events between last poll and process exit
 
 
-def run_claude_family(role: str, binary: str, effort: str, agent_prompt: Path,
-                      task_prompt: str, cwd: Path) -> dict:
+def run_claude_family(role: str, binary: str, claude_model: str | None, effort: str,
+                      agent_prompt: Path, task_prompt: str, cwd: Path) -> dict:
     session_id = str(uuid.uuid4())
     cmd = [
         binary, "--dangerously-skip-permissions",
@@ -227,7 +227,11 @@ def run_claude_family(role: str, binary: str, effort: str, agent_prompt: Path,
         "--session-id", session_id,
         "-p", task_prompt,
     ]
-    log(role, f"start {binary} (effort={effort}, session={session_id[:8]})")
+    if claude_model:
+        cmd[1:1] = ["--model", claude_model]
+    log(role, f"start {binary}"
+              + (f" [{claude_model}]" if claude_model else "")
+              + f" (effort={effort}, session={session_id[:8]})")
     with TranscriptTail(role, session_id):
         proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     info = {"session_id": session_id, "exit_code": proc.returncode}
@@ -281,10 +285,14 @@ def run_codex(role: str, effort: str, agent_prompt: Path,
 
 def run_subagent(role: str, model: str, effort: str, agent_name: str,
                  task_prompt: str, cwd: Path) -> dict:
+    """`model` is a CLI name ("codex", "claude", "claude-ds", …), optionally
+    with a specific model id for claude-family CLIs: "claude:claude-opus-4-6"."""
     agent_prompt = PLUGIN_ROOT / "agents" / f"{agent_name}.md"
     if model == "codex":
         return run_codex(role, effort, agent_prompt, task_prompt, cwd)
-    return run_claude_family(role, model, effort, agent_prompt, task_prompt, cwd)
+    binary, _, claude_model = model.partition(":")
+    return run_claude_family(role, binary, claude_model or None, effort,
+                             agent_prompt, task_prompt, cwd)
 
 
 # ---------------------------------------------------------------- main loop
