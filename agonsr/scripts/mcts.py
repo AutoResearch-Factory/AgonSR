@@ -312,14 +312,19 @@ def _save_tree_image(run_dir: Path, lines: list[str]) -> Path | None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    runs_dir = Path("runs")
-    run_dir = runs_dir / f"llm-mcts_{_now_stamp()}"
-    suffix = 1
-    while run_dir.exists():
-        run_dir = runs_dir / f"llm-mcts_{_now_stamp()}_{suffix}"
-        suffix += 1
-
-    run_dir.mkdir(parents=True)
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+        if _state_path(run_dir).exists():
+            raise SystemExit(f"refusing to init: {run_dir} already has a state file")
+        run_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        runs_dir = Path("runs")
+        run_dir = runs_dir / f"llm-mcts_{_now_stamp()}"
+        suffix = 1
+        while run_dir.exists():
+            run_dir = runs_dir / f"llm-mcts_{_now_stamp()}_{suffix}"
+            suffix += 1
+        run_dir.mkdir(parents=True)
     state = {
         "method": "llm-mcts",
         "run_dir": str(run_dir),
@@ -408,6 +413,8 @@ def main() -> None:
 
     p_init = sub.add_parser("init")
     p_init.add_argument("--score-direction", required=True, choices=("maximize", "minimize"))
+    p_init.add_argument("--run-dir", default=None,
+                        help="create the run at this fixed path instead of runs/llm-mcts_<timestamp>")
     p_init.add_argument("--ucb-c", type=float, default=DEFAULT_UCB_C)
     p_init.add_argument("--pw-k", type=float, default=DEFAULT_PW_K)
     p_init.add_argument("--pw-alpha", type=float, default=DEFAULT_PW_ALPHA)
