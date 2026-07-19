@@ -1,6 +1,6 @@
-# AutoSR
+# AgonSR
 
-AutoSR is a Claude Code plugin for symbolic ansatz search.
+AgonSR is a Claude Code plugin for symbolic ansatz search.
 Problems and generated artifacts live outside the plugin, usually in a problem workspace such as `artifacts/pile_efficiency/`.
 The [`artifacts/`](https://github.com/WhymustIhaveaname/AutoSR-artifacts) directory is a separate git submodule/repo for problem workspaces, data, runs, and generated outputs.
 
@@ -10,7 +10,7 @@ From a problem workspace:
 
 ```
 cd /path/to/problem-workspace
-claude --plugin-dir /path/to/AutoSR/autosr --dangerously-skip-permissions --model claude-sonnet-5[1m]
+claude --plugin-dir /path/to/AgonSR/agonsr --dangerously-skip-permissions --model claude-sonnet-5[1m]
 ```
 
 Then run `/llm-mcts 10 problem.md`.
@@ -44,4 +44,4 @@ The dispatcher reads this file and passes each section only to the corresponding
 
 `llm-mcts` is only a dispatcher. It initializes or resumes a run, asks `mcts.py next` for the next candidate, sends fixed minimal prompts to `ansatz-proposer` and `ansatz-reviewer`, reads the `<review score="X">` block from `ansatz.md`, calls `mcts.py update`, and finally shows the best candidates.
 
-Run files are written under `runs/`. See `autosr/references/project_manual.md` for the exact workspace and ansatz-file conventions.
+Run files are written under `runs/`. See `agonsr/references/project_manual.md` for the exact workspace and ansatz-file conventions.

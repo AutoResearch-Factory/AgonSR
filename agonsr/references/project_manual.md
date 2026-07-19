@@ -1,4 +1,4 @@
-# AutoSR Manual
+# AgonSR Manual
 
 ## Problem workspace layout
 
