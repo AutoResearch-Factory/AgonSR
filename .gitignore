@@ -1,1 +1,5 @@
 /agonsr/settings.toml
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

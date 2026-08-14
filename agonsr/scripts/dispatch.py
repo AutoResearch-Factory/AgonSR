@@ -19,20 +19,42 @@ Semantics:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sandbox  # noqa: E402
+
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 SEARCH_DIRNAME = "search"
 CODEX_MODEL = "gpt-5.6-sol"
+
+# Set by the WebUI when it starts a run. With them the subagent authenticates
+# through a proxy that holds the real credentials outside the sandbox; without
+# them we are being run by hand, so the operator's own credentials are mounted
+# read-only instead. Either way the filesystem confinement is identical.
+PROXY_URL_ENV = "AGONSR_PROXY_URL"
+RUN_TOKEN_ENV = "AGONSR_RUN_TOKEN"
+
+CLAUDE_CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
+CLAUDE_SETTINGS = Path.home() / ".claude.json"
+CODEX_CREDENTIALS = Path.home() / ".codex" / "auth.json"
+CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
+
+# Standalone mode hands the CLIs their own config trees rather than a synthetic
+# minimum, because both reference absolute host paths from inside their config
+# and a hand-built substitute breaks the moment either adds another one.
+STANDALONE_HOME_MOUNTS = (Path(".claude"), Path(".codex"), Path(".claude.json"))
 
 PROPOSER_TEMPLATE = (
     "CLAUDE_PLUGIN_ROOT: {plugin}, PROBLEM_PATH: {problem}, "
@@ -91,6 +113,21 @@ def mcts(workdir: Path, *args: str) -> str:
     return proc.stdout
 
 
+def ancestor_paths(ancestors: str) -> list[Path]:
+    """The ansatz files listed by `mcts.py next`, and only those.
+
+    Non-ancestors are deliberately absent: the proposer prompt already asks the
+    agent not to read them, and the sandbox mounts nothing that is not here, so
+    the request is backed by the kernel rather than resting on good behaviour.
+    """
+    if not ancestors or ancestors.strip() == "none":
+        return []
+    # "- ancestor 1 (father): /path/to/0001/ansatz.md". Project names may
+    # contain spaces, so the path runs to end of line rather than to whitespace.
+    return [Path(m) for m in re.findall(r"^-\s*[^:]*:\s*(.+?/ansatz\.md)\s*$",
+                                        ancestors, re.MULTILINE)]
+
+
 def parse_next(out: str) -> tuple[str, Path, str]:
     cid = re.search(r"CANDIDATE_ID:\s*(\S+)", out)
     wd = re.search(r"WORKDIR:\s*(\S+)", out)
@@ -133,8 +170,10 @@ def fail_hard(workdir: Path, reason: str, detail: str, **ctx) -> None:
 
 # ---------------------------------------------------------------- subagents
 
-def _transcript_roots() -> list[Path]:
+def _transcript_roots(config_dir: Path | None = None) -> list[Path]:
     roots = []
+    if config_dir:
+        roots.append(Path(config_dir) / "projects")
     cfg = os.environ.get("CLAUDE_CONFIG_DIR")
     if cfg:
         roots.append(Path(cfg) / "projects")
@@ -142,8 +181,8 @@ def _transcript_roots() -> list[Path]:
     return roots
 
 
-def _find_transcript(session_id: str) -> Path | None:
-    for root in _transcript_roots():
+def _find_transcript(session_id: str, config_dir: Path | None = None) -> Path | None:
+    for root in _transcript_roots(config_dir):
         hits = list(root.glob(f"*/{session_id}.jsonl"))
         if hits:
             return hits[0]
@@ -176,9 +215,10 @@ def _render_event(role: str, line: str) -> None:
 class TranscriptTail:
     """Streams a claude session transcript into the log as it grows."""
 
-    def __init__(self, role: str, session_id: str):
+    def __init__(self, role: str, session_id: str, config_dir: Path | None = None):
         self.role = role
         self.session_id = session_id
+        self.config_dir = config_dir
         self.path: Path | None = None
         self.offset = 0
         self.stop = threading.Event()
@@ -186,7 +226,7 @@ class TranscriptTail:
 
     def poll(self) -> None:
         if self.path is None:
-            self.path = _find_transcript(self.session_id)
+            self.path = _find_transcript(self.session_id, self.config_dir)
             if self.path is None:
                 return
         try:
@@ -215,8 +255,91 @@ class TranscriptTail:
         self.poll()  # final drain — events between last poll and process exit
 
 
+def _scratch_root() -> str | None:
+    """Somewhere to put per-invocation scratch that is not /tmp.
+
+    codex refuses to create its PATH aliases when CODEX_HOME sits under /tmp,
+    so prefer the per-user runtime directory and fall back only if it is gone.
+    """
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime and Path(runtime).is_dir():
+        root = Path(runtime) / "agonsr"
+        root.mkdir(parents=True, exist_ok=True)
+        return str(root)
+    return None
+
+
+class _Sandbox:
+    """One bwrap namespace, alive for exactly one subagent invocation."""
+
+    def __init__(self, argv: list[str], exe: Path, scratch: Path, home: Path):
+        self.argv = argv
+        self.exe = exe
+        self.scratch = scratch
+        self.home = home
+
+    @property
+    def claude_config_dir(self) -> Path:
+        return self.home / ".claude"
+
+    def wrap(self, cmd: list[str]) -> list[str]:
+        """Prefix the command and point it at the executable's bound path."""
+        return self.argv + [str(self.exe)] + cmd[1:]
+
+
+@contextlib.contextmanager
+def _sandboxed(binary: str, cwd: Path, ro_paths: list[Path]):
+    """Confine one subagent to `cwd`, with `ro_paths` readable and nothing else.
+
+    The scratch home exists so the CLI has somewhere to write session logs: the
+    host can still tail them (that is how live logging works) and the directory
+    is deleted when the call returns, so repeated runs cannot silt up the box.
+    """
+    sandbox.require()
+    exe = Path(shutil.which(binary) or binary).resolve()
+    scratch = Path(tempfile.mkdtemp(prefix="agonsr-sandbox-", dir=_scratch_root()))
+    try:
+        proxy = os.environ.get(PROXY_URL_ENV)
+        token = os.environ.get(RUN_TOKEN_ENV)
+        served = bool(proxy and token)
+        home = scratch if served else Path.home()
+
+        env = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "HOME": str(home),
+            "TMPDIR": "/tmp",
+            "USER": os.environ.get("USER", "agonsr"),
+            "LANG": os.environ.get("LANG", "C.UTF-8"),
+            "TERM": "dumb",
+            "CLAUDE_CONFIG_DIR": str(home / ".claude"),
+            "CODEX_HOME": str(home / ".codex"),
+        }
+        mounts = [PLUGIN_ROOT, exe, *ro_paths]
+        writable = [scratch]
+
+        if served:
+            # Started by the WebUI. The real credentials never enter the
+            # namespace; what goes in is a run token that is worthless anywhere
+            # except the local proxy holding those credentials.
+            env["ANTHROPIC_BASE_URL"] = proxy
+            env["ANTHROPIC_API_KEY"] = token
+            env[RUN_TOKEN_ENV] = token
+        else:
+            # Started by hand. There is no untrusted party here, so the CLIs get
+            # their own config trees; the rest of the home directory is still
+            # absent, and the work is still confined to the candidate dir.
+            writable += [Path.home() / p for p in STANDALONE_HOME_MOUNTS]
+
+        argv = sandbox.build_argv(work_dir=cwd, home_dir=scratch,
+                                  ro_paths=mounts, rw_paths=writable, env=env)
+        yield _Sandbox(argv, exe, scratch, home)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def run_claude_family(role: str, binary: str, claude_model: str | None, effort: str,
-                      agent_prompt: Path, task_prompt: str, cwd: Path) -> dict:
+                      agent_prompt: Path, task_prompt: str, cwd: Path,
+                      ro_paths: list[Path] | None = None) -> dict:
     session_id = str(uuid.uuid4())
     cmd = [
         binary, "--dangerously-skip-permissions",
@@ -232,8 +355,10 @@ def run_claude_family(role: str, binary: str, claude_model: str | None, effort: 
     log(role, f"start {binary}"
               + (f" [{claude_model}]" if claude_model else "")
               + f" (effort={effort}, session={session_id[:8]})")
-    with TranscriptTail(role, session_id):
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    with _sandboxed(binary, cwd, ro_paths or []) as sbx:
+        with TranscriptTail(role, session_id, sbx.claude_config_dir):
+            proc = subprocess.run(sbx.wrap(cmd), cwd=cwd,
+                                  capture_output=True, text=True)
     info = {"session_id": session_id, "exit_code": proc.returncode}
     try:
         out = json.loads(proc.stdout)
@@ -248,51 +373,67 @@ def run_claude_family(role: str, binary: str, claude_model: str | None, effort: 
     return info
 
 
+def _codex_proxy_args() -> list[str]:
+    """Point codex at the credential proxy, when the WebUI gave us one."""
+    proxy = os.environ.get(PROXY_URL_ENV)
+    if not os.environ.get(RUN_TOKEN_ENV) or not proxy:
+        return []
+    provider = (f'{{name="agonsr", base_url="{proxy}/v1", '
+                f'wire_api="responses", env_key="{RUN_TOKEN_ENV}"}}')
+    return ["-c", 'model_provider="agonsr"',
+            "-c", f"model_providers.agonsr={provider}"]
+
+
 def run_codex(role: str, effort: str, agent_prompt: Path,
-              task_prompt: str, cwd: Path) -> dict:
-    out_dir = Path("/tmp") / os.environ.get("USER", "agonsr")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"sr-{role}-{uuid.uuid4().hex[:8]}.txt"
+              task_prompt: str, cwd: Path,
+              ro_paths: list[Path] | None = None) -> dict:
+    # Written inside the sandbox's private tmpfs and never read back; it exists
+    # only because codex insists on somewhere to put its last message.
+    out_file = f"/tmp/sr-{role}-{uuid.uuid4().hex[:8]}.txt"
     cmd = [
         "codex", "exec", "--dangerously-bypass-approvals-and-sandbox",
         "-m", CODEX_MODEL, "-c", f"model_reasoning_effort={effort}",
-        "--output-last-message", str(out_file),
+        *_codex_proxy_args(),
+        "--output-last-message", out_file,
         task_prompt,
     ]
     log(role, f"start codex (effort={effort})")
     info = {"exit_code": None}
-    with open(agent_prompt, "r", encoding="utf-8") as agent_fh:
-        proc = subprocess.Popen(
-            cmd, cwd=cwd, stdin=agent_fh,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        )
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        line = line.rstrip()
-        if not line:
-            continue
-        m = re.search(r"session id:?\s*([0-9a-f-]{8,})", line, re.IGNORECASE)
-        if m:
-            info["session_id"] = m.group(1)
-        log(role, line[:200])
-    proc.wait()
+    with _sandboxed("codex", cwd, ro_paths or []) as sbx:
+        with open(agent_prompt, "r", encoding="utf-8") as agent_fh:
+            proc = subprocess.Popen(
+                sbx.wrap(cmd), cwd=cwd, stdin=agent_fh,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            m = re.search(r"session id:?\s*([0-9a-f-]{8,})", line, re.IGNORECASE)
+            if m:
+                info["session_id"] = m.group(1)
+            log(role, line[:200])
+        proc.wait()
     info["exit_code"] = proc.returncode
-    if out_file.exists():
-        out_file.unlink()
     log(role, f"done (exit={proc.returncode})")
     return info
 
 
 def run_subagent(role: str, model: str, effort: str, agent_name: str,
-                 task_prompt: str, cwd: Path) -> dict:
+                 task_prompt: str, cwd: Path,
+                 ro_paths: list[Path] | None = None) -> dict:
     """`model` is a CLI name ("codex", "claude", "claude-ds", …), optionally
-    with a specific model id for claude-family CLIs: "claude:claude-opus-4-6"."""
+    with a specific model id for claude-family CLIs: "claude:claude-opus-4-6".
+
+    `ro_paths` is everything outside `cwd` this subagent is allowed to read.
+    """
     agent_prompt = PLUGIN_ROOT / "agents" / f"{agent_name}.md"
     if model == "codex":
-        return run_codex(role, effort, agent_prompt, task_prompt, cwd)
+        return run_codex(role, effort, agent_prompt, task_prompt, cwd, ro_paths)
     binary, _, claude_model = model.partition(":")
     return run_claude_family(role, binary, claude_model or None, effort,
-                             agent_prompt, task_prompt, cwd)
+                             agent_prompt, task_prompt, cwd, ro_paths)
 
 
 # ---------------------------------------------------------------- main loop
@@ -360,12 +501,15 @@ def main() -> None:
         clean_dangling(cand_dir)
         cand_dir.mkdir(parents=True, exist_ok=True)
 
+        readable = [problem, workdir / "data"]
+
         proposer_task = PROPOSER_TEMPLATE.format(
             plugin=PLUGIN_ROOT, problem=problem, ancestors=ancestors,
             workdir=cand_dir, notes=notes["proposer"],
         )
         p_info = run_subagent("proposer", args.proposer_model, args.proposer_effort,
-                              "ansatz-proposer", proposer_task, cand_dir)
+                              "ansatz-proposer", proposer_task, cand_dir,
+                              readable + ancestor_paths(ancestors))
         ansatz = cand_dir / "ansatz.md"
         if not ansatz.exists():
             fail_hard(workdir, "no_ansatz",
@@ -377,7 +521,7 @@ def main() -> None:
             workdir=cand_dir, notes=notes["reviewer"],
         )
         r_info = run_subagent("reviewer", args.reviewer_model, args.reviewer_effort,
-                              "ansatz-reviewer", reviewer_task, cand_dir)
+                              "ansatz-reviewer", reviewer_task, cand_dir, readable)
         score = extract_score(ansatz)
         if score is None:
             fail_hard(workdir, "no_score",
