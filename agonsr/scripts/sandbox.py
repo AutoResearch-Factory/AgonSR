@@ -22,14 +22,24 @@ from pathlib import Path
 
 BWRAP = "bwrap"
 
-# Enough of the system to run python and node, all read-only. Mounted with
-# --ro-bind-try, so entries that a given distribution does not have cost
-# nothing. /usr/local carries npm-installed CLIs; /etc/crypto-policies is
-# what Fedora's openssl.cnf includes, and node fails to start without it.
-SYSTEM_RO = ("/usr", "/usr/local",
-             "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf",
-             "/etc/localtime", "/etc/ssl", "/etc/pki", "/etc/ca-certificates",
-             "/etc/crypto-policies", "/etc/alternatives")
+# Enough of the system to run python and node, all read-only. Every entry here
+# was confirmed by removing it and watching something break; see the table
+# below for which distribution needs which. Mounted with --ro-bind-try, so an
+# entry a given distribution lacks costs nothing.
+#
+#   /usr                  everything. Without it there is not even a /bin/sh
+#   /etc/resolv.conf      DNS
+#   /etc/alternatives     Ubuntu: /usr/bin/python3 is a symlink into it
+#   /etc/ssl              Ubuntu: the certificate store
+#   /etc/pki              Fedora: the certificate store
+#   /etc/crypto-policies  Fedora: openssl.cnf includes it; node will not start
+#
+# Deliberately absent, each verified to change nothing: /usr/local (a plain
+# subdirectory of /usr on both machines), /etc/ca-certificates, /etc/hosts and
+# /etc/nsswitch.conf (glibc's built-in fallbacks resolve localhost fine), and
+# /etc/localtime (timestamps come out as UTC, which is no loss in a log).
+SYSTEM_RO = ("/usr", "/etc/resolv.conf", "/etc/alternatives",
+             "/etc/ssl", "/etc/pki", "/etc/crypto-policies")
 
 # Distributions differ on which of these are real directories vs symlinks into
 # /usr; --symlink is a no-op against the tmpfs root when the target is unused.
