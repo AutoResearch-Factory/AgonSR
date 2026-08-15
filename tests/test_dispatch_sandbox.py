@@ -218,7 +218,7 @@ def test_by_hand_run_leaves_the_real_config_dirs_alone(no_proxy, cand):
 def test_agent_message_is_rendered(capsys):
     dispatch._render_codex_event("proposer", json.dumps(
         {"type": "item.completed", "item": {"type": "agent_message", "text": "y = x"}}))
-    assert "says: y = x" in capsys.readouterr().out
+    assert "message: y = x" in capsys.readouterr().out
 
 
 def test_command_and_its_output_are_rendered(capsys):
@@ -227,7 +227,7 @@ def test_command_and_its_output_are_rendered(capsys):
          "item": {"type": "command_execution", "command": "ls -a",
                   "aggregated_output": "ansatz.md", "exit_code": 0}}))
     out = capsys.readouterr().out
-    assert "ran: ls -a" in out
+    assert "exec: ls -a" in out
     assert "ansatz.md" in out
 
 

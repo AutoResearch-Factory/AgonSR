@@ -238,14 +238,16 @@ def _render_codex_event(role: str, line: str) -> str | None:
 
     item = d.get("item") or {}
     itype = item.get("type")
+    # Labels follow codex's own names for these events, so the log reads the
+    # way running codex by hand does.
     if itype == "agent_message":
         text = " ".join(str(item.get("text", "")).split())
         if text:
-            log(role, f"says: {text[:200]}")
+            log(role, f"message: {text[:200]}")
     elif itype == "command_execution":
         command = " ".join(str(item.get("command", "")).split())
         code = item.get("exit_code")
-        log(role, f"ran: {command[:160]}" + (f" (exit={code})" if code else ""))
+        log(role, f"exec: {command[:160]}" + (f" (exit={code})" if code else ""))
         output = " ".join(str(item.get("aggregated_output", "")).split())
         if output:
             log(role, f"  → {output[:160]}")
