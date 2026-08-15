@@ -1,6 +1,7 @@
 """How dispatch.py wires each subagent into its sandbox."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -210,3 +211,49 @@ def test_served_run_creates_the_cli_config_dirs(with_proxy, cand):
 def test_by_hand_run_leaves_the_real_config_dirs_alone(no_proxy, cand):
     with dispatch._sandboxed("sh", cand, []) as sbx:
         assert sbx.home == Path.home()
+
+
+# ------------------------------------------------------- codex event rendering
+
+def test_agent_message_is_rendered(capsys):
+    dispatch._render_codex_event("proposer", json.dumps(
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "y = x"}}))
+    assert "says: y = x" in capsys.readouterr().out
+
+
+def test_command_and_its_output_are_rendered(capsys):
+    dispatch._render_codex_event("proposer", json.dumps(
+        {"type": "item.completed",
+         "item": {"type": "command_execution", "command": "ls -a",
+                  "aggregated_output": "ansatz.md", "exit_code": 0}}))
+    out = capsys.readouterr().out
+    assert "ran: ls -a" in out
+    assert "ansatz.md" in out
+
+
+def test_session_id_comes_from_the_thread_event():
+    got = dispatch._render_codex_event("proposer", json.dumps(
+        {"type": "thread.started", "thread_id": "01a00389-d76c-7901"}))
+    assert got == "01a00389-d76c-7901"
+
+
+def test_unknown_events_render_nothing(capsys):
+    """The whole point: an event we did not ask for stays out of the log rather
+    than leaking into it. codex is free to add new ones."""
+    for event in ({"type": "turn.started"},
+                  {"type": "item.started", "item": {"type": "command_execution"}},
+                  {"type": "turn.completed", "usage": {"input_tokens": 21115}},
+                  {"type": "something.new", "prompt": "SECRET SYSTEM PROMPT"}):
+        dispatch._render_codex_event("proposer", json.dumps(event))
+    assert capsys.readouterr().out == ""
+
+
+def test_malformed_lines_are_ignored(capsys):
+    assert dispatch._render_codex_event("proposer", "not json at all") is None
+    assert capsys.readouterr().out == ""
+
+
+def test_errors_are_surfaced(capsys):
+    dispatch._render_codex_event("proposer", json.dumps(
+        {"type": "error", "message": "upstream refused"}))
+    assert "error: upstream refused" in capsys.readouterr().out

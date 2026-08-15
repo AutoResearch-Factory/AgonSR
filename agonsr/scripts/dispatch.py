@@ -212,6 +212,46 @@ def _render_event(role: str, line: str) -> None:
                 log(role, f"tool {name}: {detail[:160]}")
 
 
+def _render_codex_event(role: str, line: str) -> str | None:
+    """Render one `codex exec --json` event, and return a session id if it
+    carries one.
+
+    Same shape as _render_event above, and the same reason: only the events
+    named here reach the log. Streaming codex's plain stdout instead put its
+    startup banner and the whole prompt — the task line and the agent
+    definition it was piped, echoed back as a <stdin> block — in front of
+    whoever opens the run log. Picking events out means anything new codex
+    decides to print stays out by default rather than leaking by default.
+    """
+    try:
+        d = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    kind = d.get("type")
+    if kind == "thread.started":
+        return d.get("thread_id")
+    if kind == "error":
+        log(role, f"error: {str(d.get('message', d))[:200]}")
+        return None
+    if kind != "item.completed":
+        return None
+
+    item = d.get("item") or {}
+    itype = item.get("type")
+    if itype == "agent_message":
+        text = " ".join(str(item.get("text", "")).split())
+        if text:
+            log(role, f"says: {text[:200]}")
+    elif itype == "command_execution":
+        command = " ".join(str(item.get("command", "")).split())
+        code = item.get("exit_code")
+        log(role, f"ran: {command[:160]}" + (f" (exit={code})" if code else ""))
+        output = " ".join(str(item.get("aggregated_output", "")).split())
+        if output:
+            log(role, f"  → {output[:160]}")
+    return None
+
+
 class TranscriptTail:
     """Streams a claude session transcript into the log as it grows."""
 
@@ -396,7 +436,8 @@ def run_codex(role: str, effort: str, agent_prompt: Path,
     # only because codex insists on somewhere to put its last message.
     out_file = f"/tmp/sr-{role}-{uuid.uuid4().hex[:8]}.txt"
     cmd = [
-        "codex", "exec", "--dangerously-bypass-approvals-and-sandbox",
+        "codex", "exec", "--json",
+        "--dangerously-bypass-approvals-and-sandbox",
         "-m", CODEX_MODEL, "-c", f"model_reasoning_effort={effort}",
         *_codex_proxy_args(),
         "--output-last-message", out_file,
@@ -407,18 +448,19 @@ def run_codex(role: str, effort: str, agent_prompt: Path,
     with _sandboxed("codex", cwd, ro_paths or []) as sbx:
         with open(agent_prompt, "r", encoding="utf-8") as agent_fh:
             proc = subprocess.Popen(
+                # stderr stays separate: --json puts the events on stdout, and
+                # merging the banner back in would undo the point of asking.
                 sbx.wrap(cmd), cwd=cwd, stdin=agent_fh,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
             )
         assert proc.stdout is not None
         for line in proc.stdout:
-            line = line.rstrip()
+            line = line.strip()
             if not line:
                 continue
-            m = re.search(r"session id:?\s*([0-9a-f-]{8,})", line, re.IGNORECASE)
-            if m:
-                info["session_id"] = m.group(1)
-            log(role, line[:200])
+            session_id = _render_codex_event(role, line)
+            if session_id:
+                info["session_id"] = session_id
         proc.wait()
     info["exit_code"] = proc.returncode
     log(role, f"done (exit={proc.returncode})")
