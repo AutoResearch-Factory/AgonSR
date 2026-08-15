@@ -304,6 +304,11 @@ def _sandboxed(binary: str, cwd: Path, ro_paths: list[Path]):
         served = bool(proxy and token)
         home = scratch if served else Path.home()
 
+        # Both CLIs refuse to start when their config directory is missing, and
+        # a served run's home is a scratch directory that starts out empty.
+        for name in (".claude", ".codex"):
+            (home / name).mkdir(parents=True, exist_ok=True)
+
         env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "HOME": str(home),

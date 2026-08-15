@@ -196,3 +196,17 @@ def test_missing_bwrap_refuses_to_run(no_proxy, cand, monkeypatch):
     with pytest.raises(dispatch.sandbox.SandboxUnavailable):
         with dispatch._sandboxed("sh", cand, []):
             pass
+
+
+def test_served_run_creates_the_cli_config_dirs(with_proxy, cand):
+    """Both CLIs refuse to start when their config directory is missing, and a
+    served run's home is a scratch directory that starts out empty. codex says
+    'CODEX_HOME points to ... but that path does not exist' and exits 1."""
+    with dispatch._sandboxed("sh", cand, []) as sbx:
+        assert (sbx.home / ".claude").is_dir()
+        assert (sbx.home / ".codex").is_dir()
+
+
+def test_by_hand_run_leaves_the_real_config_dirs_alone(no_proxy, cand):
+    with dispatch._sandboxed("sh", cand, []) as sbx:
+        assert sbx.home == Path.home()
