@@ -69,6 +69,7 @@ REVIEWER_TEMPLATE = (
 IGNOREME_HEADERS = {
     "proposer": "## Notes to ansatz-proposer",
     "reviewer": "## Notes to ansatz-reviewer",
+    "dispatcher": "## Notes to dispatcher",
 }
 
 
