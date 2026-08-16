@@ -85,12 +85,26 @@ def _score_direction(state: dict) -> str:
 
 
 def _percentile_reward(score: float, scores: list[float], direction: str) -> float:
-    if len(scores) <= 1:
-        return 5.0
+    """Where this score sits in the history, as a midrank.
+
+    Counting `s <= score` gave every member of a tie the rank of the whole
+    group, so three candidates that all scored 5 each took the full 10 — the
+    joint worst was rewarded as the outright best. The midrank splits the tie
+    between the ranks it spans, which is also why the single-score case needs
+    no special handling any more: one score against itself is rank 0.5, or 5.0,
+    which is what the special case used to return.
+    """
+    if not scores:
+        raise ValueError("scores must not be empty")
+    if not math.isfinite(score) or any(not math.isfinite(s) for s in scores):
+        raise ValueError("scores must be finite")
     if direction == "maximize":
-        rank = sum(1 for s in scores if s <= score)
+        below = sum(1 for s in scores if s < score)
+        at_or_below = sum(1 for s in scores if s <= score)
     else:
-        rank = sum(1 for s in scores if s >= score)
+        below = sum(1 for s in scores if s > score)
+        at_or_below = sum(1 for s in scores if s >= score)
+    rank = (below + at_or_below) / 2
     return 10.0 * rank / len(scores)
 
 
@@ -367,9 +381,18 @@ def cmd_update(args: argparse.Namespace) -> None:
     cid = args.candidate_id
     if cid not in state["nodes"] or cid == ROOT_ID:
         raise SystemExit(f"unknown candidate id: {cid}")
-    score = float(args.score)
-
     node = state["nodes"][cid]
+    # Scoring the same candidate twice backpropagated a second visit up its
+    # whole ancestry, so the tree recorded more work than was done and UCB
+    # explored on the strength of it.
+    if node.get("status") != "pending":
+        raise SystemExit(f"candidate is not pending: {cid}")
+    score = float(args.score)
+    # A NaN here is not confined to one node: every percentile afterwards is
+    # computed against a history containing it.
+    if not math.isfinite(score):
+        raise SystemExit("score must be finite")
+
     node["score"] = score
     node["status"] = "done"
     _backprop_visit(state, cid)
