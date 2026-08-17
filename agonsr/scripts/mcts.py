@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""Agentic MCTS scheduler for AgonSR.
+"""MCTS scheduler for AgonSR.
 
 This script does not call LLMs and does not evaluate candidates.
 It only manages tree state and returns the next candidate workdir.
 
+Several pipelines may run at once. The allocator is the pending-aware
+PW-MCTS of AgonAlpha (arXiv:2608.11250 §4.4, Algorithm 1): each node carries a
+completed visit count and an in-flight count, widening and the exploration
+term are computed from their sum, a non-root node with a running child opens
+no further children, the root is exempt from that so lineages can start in
+parallel, and a busy dead end falls back to the root so no worker starves.
+
 Commands:
-  mcts.py init --score-direction maximize|minimize
+  mcts.py init --score-direction maximize|minimize [--run-dir RUN_DIR]
   mcts.py next --run-dir RUN_DIR
   mcts.py update --run-dir RUN_DIR --candidate-id ID --score X
+  mcts.py discard-pending --run-dir RUN_DIR
   mcts.py show --run-dir RUN_DIR
   mcts.py tree --run-dir RUN_DIR
 """
@@ -15,9 +23,13 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import math
+import os
 import re
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -43,13 +55,58 @@ def _ansatz_path(run_dir: Path, cid: str) -> Path:
     return _candidate_dir(run_dir, cid) / "ansatz.md"
 
 
+def _lock_path(run_dir: Path) -> Path:
+    return run_dir / ".state.lock"
+
+
+@contextmanager
+def _state_lock(run_dir: Path):
+    """Serialize every read-modify-write of the tree.
+
+    Concurrent pipelines each call `next` and `update`, so without this two of
+    them can select against the same snapshot and be handed the same node.
+    """
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with _lock_path(run_dir).open("a") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def _load_state(run_dir: Path) -> dict:
-    with _state_path(run_dir).open() as f:
-        return json.load(f)
+    with _state_path(run_dir).open(encoding="utf-8") as f:
+        state = json.load(f)
+    # Candidate ids come from the node set, not a counter that can drift out of
+    # step with it when a write is lost.
+    state.pop("next_candidate_num", None)
+    return state
 
 
 def _save_state(run_dir: Path, state: dict) -> None:
-    _state_path(run_dir).write_text(json.dumps(state, indent=2) + "\n")
+    """Write via a temporary file and rename.
+
+    A reader holding the lock still sees a whole file if the writer dies
+    halfway, which a plain truncate-and-write does not give.
+    """
+    run_dir.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(state, indent=2) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=".state.", suffix=".tmp", dir=run_dir)
+    tmp_path = Path(tmp_name)
+    try:
+        try:
+            f = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            os.close(fd)
+            raise
+        with f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, _state_path(run_dir))
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _new_node(node_id: str, parent: str | None, depth: int, status: str = "open") -> dict:
@@ -64,17 +121,24 @@ def _new_node(node_id: str, parent: str | None, depth: int, status: str = "open"
     }
 
 
+def _initial_state(run_dir: Path, score_direction: str, ucb_c: float,
+                   pw_k: float, pw_alpha: float) -> dict:
+    return {
+        "method": "llm-mcts",
+        "run_dir": str(run_dir),
+        "config": {
+            "score_direction": score_direction,
+            "ucb_c": ucb_c,
+            "pw_k": pw_k,
+            "pw_alpha": pw_alpha,
+        },
+        "nodes": {ROOT_ID: _new_node(ROOT_ID, None, 0, status="root")},
+    }
+
+
 def _next_candidate_id(state: dict) -> str:
-    state["next_candidate_num"] += 1
-    return f"{state['next_candidate_num']:04d}"
-
-
-def _score_history(state: dict) -> list[float]:
-    scores = []
-    for cid, node in state["nodes"].items():
-        if cid != ROOT_ID and node.get("score") is not None:
-            scores.append(float(node["score"]))
-    return scores
+    used = [int(cid) for cid in state["nodes"] if cid != ROOT_ID]
+    return f"{max(used, default=0) + 1:04d}"
 
 
 def _score_direction(state: dict) -> str:
@@ -84,15 +148,23 @@ def _score_direction(state: dict) -> str:
     return direction
 
 
+def _score_history(state: dict) -> list[float]:
+    return [
+        float(node["score"])
+        for cid, node in state["nodes"].items()
+        if cid != ROOT_ID
+        and node.get("status") == "done"
+        and node.get("score") is not None
+    ]
+
+
 def _percentile_reward(score: float, scores: list[float], direction: str) -> float:
-    """Where this score sits in the history, as a midrank.
+    """Where this score sits in the completed population, as a midrank.
 
     Counting `s <= score` gave every member of a tie the rank of the whole
-    group, so three candidates that all scored 5 each took the full 10 — the
-    joint worst was rewarded as the outright best. The midrank splits the tie
-    between the ranks it spans, which is also why the single-score case needs
-    no special handling any more: one score against itself is rank 0.5, or 5.0,
-    which is what the special case used to return.
+    group, so candidates that all scored the same each took full marks. The
+    midrank splits a tie across the ranks it spans, and needs no special case
+    for a single score: one score against itself is rank 0.5, or 5.0.
     """
     if not scores:
         raise ValueError("scores must not be empty")
@@ -109,57 +181,141 @@ def _percentile_reward(score: float, scores: list[float], direction: str) -> flo
 
 
 def _node_rewards(state: dict) -> dict[str, float]:
-    direction = _score_direction(state)
     scores = _score_history(state)
-    rewards: dict[str, float] = {}
-    for cid, node in state["nodes"].items():
-        if cid == ROOT_ID or node.get("score") is None:
-            continue
-        rewards[cid] = _percentile_reward(float(node["score"]), scores, direction)
-    return rewards
+    if not scores:
+        return {}
+    direction = _score_direction(state)
+    return {
+        cid: _percentile_reward(float(node["score"]), scores, direction)
+        for cid, node in state["nodes"].items()
+        if cid != ROOT_ID
+        and node.get("status") == "done"
+        and node.get("score") is not None
+    }
 
 
-def _subtree_reward_sum(state: dict, rewards: dict[str, float], node_id: str) -> float:
+def _subtree_reward_sum(state: dict, rewards: dict[str, float], node_id: str,
+                        _seen: set[str] | None = None) -> float:
+    """Reward accumulated by completed work in this subtree.
+
+    In-flight children contribute nothing: they have no result yet, and
+    counting them would let a branch look valuable for work not yet done.
+    """
+    if _seen is None:
+        _seen = set()
+    if node_id in _seen:
+        raise ValueError(f"cycle in subtree: {node_id}")
+    _seen.add(node_id)
     total = rewards.get(node_id, 0.0)
     for child_id in state["nodes"][node_id]["children"]:
-        total += _subtree_reward_sum(state, rewards, child_id)
+        if state["nodes"][child_id].get("status") == "done":
+            total += _subtree_reward_sum(state, rewards, child_id, _seen)
     return total
 
 
-def _ucb(state: dict, rewards: dict[str, float], child_id: str, parent_visits: int, c: float) -> float:
+def _pending_counts(state: dict) -> dict[str, int]:
+    """How much in-flight work sits beneath each node.
+
+    A running pipeline is credited to every node on its ancestor chain, so
+    this is what stops several workers piling into the same lineage.
+    """
+    nodes = state["nodes"]
+    counts = {node_id: 0 for node_id in nodes}
+    for node_id, node in nodes.items():
+        if node.get("status") != "pending":
+            continue
+        cur: str | None = node_id
+        seen: set[str] = set()
+        while cur is not None:
+            if cur in seen:
+                raise ValueError(f"cycle in parent path: {node_id}")
+            if cur not in nodes:
+                raise ValueError(f"unknown parent in path from: {node_id}")
+            seen.add(cur)
+            counts[cur] += 1
+            cur = nodes[cur]["parent"]
+    return counts
+
+
+def _done_children(state: dict, node_id: str) -> list[str]:
+    nodes = state["nodes"]
+    return [child_id for child_id in nodes[node_id]["children"]
+            if nodes[child_id].get("status") == "done"]
+
+
+def _has_pending_child(state: dict, node_id: str) -> bool:
+    nodes = state["nodes"]
+    return any(nodes[child_id].get("status") == "pending"
+               for child_id in nodes[node_id]["children"])
+
+
+def _ucb(state: dict, rewards: dict[str, float], pending_counts: dict[str, int],
+         parent_id: str, child_id: str, c: float) -> float:
+    """Pending-aware upper confidence bound.
+
+    The exploitation term divides by completed visits only, so a result is not
+    diluted by work still running. The exploration term counts in-flight work
+    in both parent and child, which is what keeps the next worker away from a
+    branch that already has one.
+    """
     child = state["nodes"][child_id]
     if child["visits"] == 0:
         return float("inf")
     q = _subtree_reward_sum(state, rewards, child_id) / child["visits"]
-    return q + c * math.sqrt(math.log(max(parent_visits, 1)) / child["visits"])
+    parent_samples = state["nodes"][parent_id]["visits"] + pending_counts[parent_id]
+    child_samples = child["visits"] + pending_counts[child_id]
+    return q + c * math.sqrt(math.log(max(parent_samples, 1)) / child_samples)
 
 
-def _should_widen(node: dict, pw_k: float, pw_alpha: float) -> bool:
-    return len(node["children"]) < pw_k * (max(node["visits"], 1) ** pw_alpha)
+def _should_widen(state: dict, pending_counts: dict[str, int], node_id: str,
+                  pw_k: float, pw_alpha: float) -> bool:
+    """Progressive widening over completed *and* in-flight evidence."""
+    node = state["nodes"][node_id]
+    done_child_count = len(_done_children(state, node_id))
+    samples = node["visits"] + pending_counts[node_id]
+    return done_child_count < pw_k * (max(samples, 1) ** pw_alpha)
 
 
 def _select_parent(state: dict) -> str:
-    nodes = state["nodes"]
     rewards = _node_rewards(state)
+    pending_counts = _pending_counts(state)
     c = state["config"]["ucb_c"]
     pw_k = state["config"]["pw_k"]
     pw_alpha = state["config"]["pw_alpha"]
 
-    cur_id = ROOT_ID
-    while True:
-        cur = nodes[cur_id]
-        if _should_widen(cur, pw_k, pw_alpha):
-            return cur_id
-        if not cur["children"]:
-            return cur_id
-        parent_visits = max(cur["visits"], 1)
-        cur_id = max(cur["children"], key=lambda cid: _ucb(state, rewards, cid, parent_visits, c))
+    def search(node_id: str) -> str | None:
+        # A non-root node may have at most one direct pending child. While that
+        # child is running, the node itself cannot be expanded again, although
+        # its completed descendants remain selectable.
+        can_expand = node_id == ROOT_ID or not _has_pending_child(state, node_id)
+        if can_expand and _should_widen(state, pending_counts, node_id, pw_k, pw_alpha):
+            return node_id
+
+        done_children = _done_children(state, node_id)
+        ranked_children = sorted(
+            done_children,
+            key=lambda child_id: _ucb(state, rewards, pending_counts, node_id, child_id, c),
+            reverse=True,
+        )
+        for child_id in ranked_children:
+            selected = search(child_id)
+            if selected is not None:
+                return selected
+        return None
+
+    # If every non-root branch is busy, root is the deliberate fallback even
+    # when its progressive-widening condition is currently closed.
+    return search(ROOT_ID) or ROOT_ID
 
 
 def _backprop_visit(state: dict, node_id: str) -> None:
     nodes = state["nodes"]
+    seen: set[str] = set()
     cur: str | None = node_id
     while cur is not None:
+        if cur in seen:
+            raise ValueError(f"cycle in parent path: {node_id}")
+        seen.add(cur)
         nodes[cur]["visits"] += 1
         cur = nodes[cur]["parent"]
 
@@ -167,25 +323,144 @@ def _backprop_visit(state: dict, node_id: str) -> None:
 def _ancestor_ids(state: dict, node_id: str) -> list[str]:
     nodes = state["nodes"]
     out: list[str] = []
+    seen: set[str] = {node_id}
     cur = nodes[node_id]["parent"]
     while cur is not None and cur != ROOT_ID:
+        if cur in seen:
+            raise ValueError(f"cycle in parent path: {node_id}")
+        seen.add(cur)
         out.append(cur)
         cur = nodes[cur]["parent"]
     return out
 
 
-def _print_next(run_dir: Path, cid: str) -> None:
+def _print_next(state: dict, run_dir: Path, cid: str) -> None:
     print(f"CANDIDATE_ID: {cid}")
     print(f"WORKDIR: {_candidate_dir(run_dir, cid)}")
-    ancestors = _ancestor_ids(_load_state(run_dir), cid)
+    ancestors = _ancestor_ids(state, cid)
     print("ANCESTOR_REPORTS:")
     if not ancestors:
         print("none")
         return
-    labels = {0: "ancestor 1 (father)", 1: "ancestor 2 (grandfather)"}
+    QUALIFIERS = ("father", "grandfather")
     for i, aid in enumerate(ancestors):
-        label = labels.get(i, f"ancestor {i + 1}")
-        print(f"- {label}: {_ansatz_path(run_dir, aid)}")
+        suffix = f" ({QUALIFIERS[i]})" if i < len(QUALIFIERS) else ""
+        print(f"- ancestor {i + 1}{suffix}: {_ansatz_path(run_dir, aid)}")
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+    else:
+        runs_dir = Path("runs")
+        run_dir = runs_dir / f"llm-mcts_{_now_stamp()}"
+        suffix = 1
+        while run_dir.exists():
+            run_dir = runs_dir / f"llm-mcts_{_now_stamp()}_{suffix}"
+            suffix += 1
+    with _state_lock(run_dir):
+        if _state_path(run_dir).exists():
+            raise SystemExit(f"refusing to init: {run_dir} already has a state file")
+        _save_state(run_dir, _initial_state(run_dir, args.score_direction,
+                                            args.ucb_c, args.pw_k, args.pw_alpha))
+    print(f"RUN_DIR: {run_dir}")
+
+
+def cmd_discard_pending(args: argparse.Namespace) -> None:
+    """Give up on candidates that were in flight when a run died.
+
+    Not the same as resuming them: a half-finished workdir has no way to tell
+    an interrupted attempt from one still being worked on, and with several
+    pipelines running there is always something in flight.
+    """
+    run_dir = Path(args.run_dir)
+    with _state_lock(run_dir):
+        if not _state_path(run_dir).exists():
+            return
+        state = _load_state(run_dir)
+        nodes = state["nodes"]
+        pending_ids = sorted(cid for cid, node in nodes.items()
+                             if cid != ROOT_ID and node.get("status") == "pending")
+        for cid in pending_ids:
+            if nodes[cid]["children"]:
+                raise SystemExit(f"pending candidate has children: {cid}")
+            nodes[cid]["status"] = "discarded"
+        if pending_ids:
+            _save_state(run_dir, state)
+
+        discarded = sorted(_candidate_dir(run_dir, cid)
+                           for cid, node in nodes.items()
+                           if cid != ROOT_ID and node.get("status") == "discarded"
+                           and _candidate_dir(run_dir, cid).exists())
+        for workdir in discarded:
+            print(f"DISCARDED_WORKDIR: {workdir}")
+
+
+def cmd_next(args: argparse.Namespace) -> None:
+    run_dir = Path(args.run_dir)
+    with _state_lock(run_dir):
+        # AgonAlpha's version initialises a missing tree here. This one cannot:
+        # the score direction has no safe default, and guessing it would run a
+        # whole search in the wrong direction without saying so.
+        if not _state_path(run_dir).exists():
+            raise SystemExit(f"no state file in {run_dir}; run `mcts.py init` first")
+        state = _load_state(run_dir)
+        parent_id = _select_parent(state)
+        parent = state["nodes"][parent_id]
+        cid = _next_candidate_id(state)
+        state["nodes"][cid] = _new_node(cid, parent_id, parent["depth"] + 1,
+                                        status="pending")
+        parent["children"].append(cid)
+        _candidate_dir(run_dir, cid).mkdir(parents=True, exist_ok=True)
+        _save_state(run_dir, state)
+        _print_next(state, run_dir, cid)
+
+
+def cmd_update(args: argparse.Namespace) -> None:
+    score = args.score
+    if not math.isfinite(score):
+        raise SystemExit("score must be finite")
+
+    run_dir = Path(args.run_dir)
+    with _state_lock(run_dir):
+        state = _load_state(run_dir)
+        cid = args.candidate_id
+        if cid not in state["nodes"] or cid == ROOT_ID:
+            raise SystemExit(f"unknown candidate id: {cid}")
+        node = state["nodes"][cid]
+        if node.get("status") == "done":
+            # Re-reporting the same result is a retry, not a second visit.
+            if float(node["score"]) == score:
+                print(f"ALREADY_UPDATED: {cid} score={score:.4g}")
+                return
+            raise SystemExit(f"candidate already has a different score: {cid}")
+        if node.get("status") != "pending":
+            raise SystemExit(f"candidate is not pending: {cid}")
+
+        node["score"] = score
+        node["status"] = "done"
+        _backprop_visit(state, cid)
+        _save_state(run_dir, state)
+        print(f"UPDATED: {cid} score={score:.4g}")
+
+
+def cmd_show(args: argparse.Namespace) -> None:
+    run_dir = Path(args.run_dir)
+    with _state_lock(run_dir):
+        state = _load_state(run_dir)
+    direction = _score_direction(state)
+    rows = []
+    for cid, node in state["nodes"].items():
+        if cid == ROOT_ID or node.get("score") is None:
+            continue
+        rows.append((float(node["score"]), cid, node["depth"],
+                     str(_ansatz_path(run_dir, cid))))
+    rows.sort(key=lambda row: row[0], reverse=direction == "maximize")
+    print(f"RUN_DIR: {run_dir}")
+    print(f"SCORE_DIRECTION: {direction}")
+    print("TOP_CANDIDATES:")
+    for score, cid, depth, ansatz in rows[:10]:
+        print(f"- {cid}: score={score:.4g} depth={depth} ansatz={ansatz}")
 
 
 def _format_score(score: object) -> str:
@@ -200,234 +475,50 @@ def _looks_like_formula(text: str) -> bool:
 
 
 def _candidate_formula(run_dir: Path, cid: str) -> str:
-    for name in ("ansatz.md", "report.md"):
-        path = _candidate_dir(run_dir, cid) / name
-        if not path.exists():
-            continue
-        text = path.read_text(errors="ignore")
-        match = re.search(r"^## One sentence\s*(.*?)(?=^## |\Z)", text, re.M | re.S)
-        section = match.group(1) if match else text
-        formulas = []
-        formulas.extend(re.findall(r"\$\$(.*?)\$\$", section, re.S))
-        formulas.extend(re.findall(r"\\\((.*?)\\\)", section, re.S))
-        formulas.extend(re.findall(r"(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)", section, re.S))
-        formulas = [re.sub(r"\s+", " ", f).strip() for f in formulas]
-        formulas = [f for f in formulas if f and _looks_like_formula(f)]
-        return "; ".join(formulas) if formulas else "no formula"
-    return "missing ansatz"
-
-
-def _tree_lines(state: dict, run_dir: Path, node_id: str, prefix: str = "", is_last: bool = True) -> list[str]:
-    node = state["nodes"][node_id]
-    if node_id == ROOT_ID:
-        lines = ["root"]
-    else:
-        label = f"{node_id} score={_format_score(node.get('score'))} | {_candidate_formula(run_dir, node_id)}"
-        connector = "└── " if is_last else "├── "
-        lines = [prefix + connector + label]
-
-    children = node.get("children", [])
-    child_prefix = prefix if node_id == ROOT_ID else prefix + ("    " if is_last else "│   ")
-    for i, child_id in enumerate(children):
-        lines.extend(_tree_lines(state, run_dir, child_id, child_prefix, i == len(children) - 1))
-    return lines
-
-
-def _sanitize_mathtext(formula: str) -> str:
-    formula = re.sub(r"\s+", " ", formula).strip()
-    formula = formula.replace("\\tfrac", "\\frac").replace("\\dfrac", "\\frac")
-    formula = re.sub(r"\\(?:left|right|bigl|bigr|Bigl|Bigr|big|Big)\s*", "", formula)
-    formula = re.sub(r"\\[,;:!]", "", formula)
-    formula = re.sub(r"\\(?:quad|qquad)\s*", " ", formula)
-    formula = re.sub(r"\\text\s*\{([^{}]*)\}", r"\\mathrm{\1}", formula)
-    formula = re.sub(r"\\operatorname\s*\{([^{}]*)\}", r"\\mathrm{\1}", formula)
-    formula = re.sub(r"(?<!\\)%", r"\\%", formula)
-    return formula
-
-
-def _render_formula(formula: str, parser: object) -> str:
-    rendered = _sanitize_mathtext(formula)
-    try:
-        parser.parse(f"${rendered}$", dpi=120)
-    except Exception:
-        return formula
-    return f"${rendered}$"
-
-
-def _image_line(line: str, parser: object) -> str:
-    if " | " not in line:
-        return line
-    head, formula_text = line.split(" | ", 1)
-    if formula_text in {"missing ansatz", "no formula"}:
-        return line
-    formulas = [f.strip() for f in re.split(r"(?<!\\);", formula_text) if f.strip()]
-    if not formulas:
-        return line
-    return f"{head} | " + "; ".join(_render_formula(formula, parser) for formula in formulas)
-
-
-def _save_tree_image(run_dir: Path, lines: list[str]) -> Path | None:
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.mathtext import MathTextParser
-    except Exception as exc:
-        print(f"TREE_IMAGE: skipped ({exc})")
-        return None
-
-    parser = MathTextParser("path")
-    image_lines = [_image_line(line, parser) for line in lines]
-    row_height = 0.34
-    fig_height = max(2.0, row_height * len(image_lines) + 0.4)
-    fig_width = 12.0
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-    ax.axis("off")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, len(image_lines))
-    for i, line in enumerate(image_lines):
-        y = len(image_lines) - i - 0.75
-        ax.text(
-            0.01,
-            y,
-            line,
-            fontsize=9,
-            fontfamily="DejaVu Sans Mono",
-            va="center",
-            ha="left",
-            clip_on=False,
-        )
-    image_path = run_dir / "tree.png"
-    try:
-        fig.savefig(image_path, dpi=200, bbox_inches="tight", pad_inches=0.2)
-    except Exception:
-        plt.close(fig)
-        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-        ax.axis("off")
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, len(lines))
-        for i, line in enumerate(lines):
-            y = len(lines) - i - 0.75
-            ax.text(
-                0.01,
-                y,
-                line,
-                fontsize=9,
-                fontfamily="DejaVu Sans Mono",
-                va="center",
-                ha="left",
-                clip_on=False,
-            )
-        fig.savefig(image_path, dpi=200, bbox_inches="tight", pad_inches=0.2)
-    finally:
-        plt.close(fig)
-    return image_path
-
-
-def cmd_init(args: argparse.Namespace) -> None:
-    if args.run_dir:
-        run_dir = Path(args.run_dir)
-        if _state_path(run_dir).exists():
-            raise SystemExit(f"refusing to init: {run_dir} already has a state file")
-        run_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        runs_dir = Path("runs")
-        run_dir = runs_dir / f"llm-mcts_{_now_stamp()}"
-        suffix = 1
-        while run_dir.exists():
-            run_dir = runs_dir / f"llm-mcts_{_now_stamp()}_{suffix}"
-            suffix += 1
-        run_dir.mkdir(parents=True)
-    state = {
-        "method": "llm-mcts",
-        "run_dir": str(run_dir),
-        "next_candidate_num": 0,
-        "config": {
-            "score_direction": args.score_direction,
-            "ucb_c": args.ucb_c,
-            "pw_k": args.pw_k,
-            "pw_alpha": args.pw_alpha,
-        },
-        "nodes": {ROOT_ID: _new_node(ROOT_ID, None, 0, status="root")},
-    }
-    _save_state(run_dir, state)
-    print(f"RUN_DIR: {run_dir}")
-
-
-def cmd_next(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir)
-    state = _load_state(run_dir)
-
-    for cid, node in sorted(state["nodes"].items()):
-        if cid != ROOT_ID and node.get("status") == "pending":
-            _candidate_dir(run_dir, cid).mkdir(parents=True, exist_ok=True)
-            _print_next(run_dir, cid)
-            return
-
-    parent_id = _select_parent(state)
-    parent = state["nodes"][parent_id]
-    cid = _next_candidate_id(state)
-    state["nodes"][cid] = _new_node(cid, parent_id, parent["depth"] + 1, status="pending")
-    parent["children"].append(cid)
-    _candidate_dir(run_dir, cid).mkdir(parents=True)
-    _save_state(run_dir, state)
-    _print_next(run_dir, cid)
-
-
-def cmd_update(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir)
-    state = _load_state(run_dir)
-    cid = args.candidate_id
-    if cid not in state["nodes"] or cid == ROOT_ID:
-        raise SystemExit(f"unknown candidate id: {cid}")
-    node = state["nodes"][cid]
-    # Scoring the same candidate twice backpropagated a second visit up its
-    # whole ancestry, so the tree recorded more work than was done and UCB
-    # explored on the strength of it.
-    if node.get("status") != "pending":
-        raise SystemExit(f"candidate is not pending: {cid}")
-    score = float(args.score)
-    # A NaN here is not confined to one node: every percentile afterwards is
-    # computed against a history containing it.
-    if not math.isfinite(score):
-        raise SystemExit("score must be finite")
-
-    node["score"] = score
-    node["status"] = "done"
-    _backprop_visit(state, cid)
-    _save_state(run_dir, state)
-    print(f"UPDATED: {cid} score={score:.4g}")
-
-
-def cmd_show(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir)
-    state = _load_state(run_dir)
-    direction = _score_direction(state)
-    rows = []
-    for cid, node in state["nodes"].items():
-        if cid == ROOT_ID or node.get("score") is None:
-            continue
-        rows.append((float(node["score"]), cid, node["depth"], str(_ansatz_path(run_dir, cid))))
-    rows.sort(key=lambda row: row[0], reverse=direction == "maximize")
-    print(f"RUN_DIR: {run_dir}")
-    print(f"SCORE_DIRECTION: {direction}")
-    print("TOP_CANDIDATES:")
-    for score, cid, depth, ansatz in rows[:10]:
-        print(f"- {cid}: score={score:.4g} depth={depth} ansatz={ansatz}")
+    path = _ansatz_path(run_dir, cid)
+    if not path.exists():
+        return "missing ansatz"
+    text = path.read_text(errors="ignore")
+    match = re.search(r"^## One sentence\s*(.*?)(?=^## |\Z)", text, re.M | re.S)
+    section = match.group(1) if match else text
+    formulas = []
+    formulas.extend(re.findall(r"\$\$(.*?)\$\$", section, re.S))
+    formulas.extend(re.findall(r"\\\((.*?)\\\)", section, re.S))
+    formulas.extend(re.findall(r"(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)", section, re.S))
+    formulas = [re.sub(r"\s+", " ", f).strip() for f in formulas]
+    formulas = [f for f in formulas if f and _looks_like_formula(f)]
+    return "; ".join(formulas) if formulas else "no formula"
 
 
 def cmd_tree(args: argparse.Namespace) -> None:
     run_dir = Path(args.run_dir)
-    state = _load_state(run_dir)
-    print(f"RUN_DIR: {run_dir}")
-    print(f"SCORE_DIRECTION: {_score_direction(state)}")
-    lines = _tree_lines(state, run_dir, ROOT_ID)
-    for line in lines:
-        print(line)
-    image_path = _save_tree_image(run_dir, lines)
-    if image_path is not None:
-        print(f"TREE_IMAGE: {image_path}")
+    if not _state_path(run_dir).exists():
+        raise SystemExit("no state file found")
+    with _state_lock(run_dir):
+        state = _load_state(run_dir)
+    nodes = state["nodes"]
+
+    def label(node_id: str) -> str:
+        node = nodes[node_id]
+        status = node.get("status", "?")
+        tag = f"{status}, v={node.get('visits', 0)}"
+        score = node.get("score")
+        if score is not None:
+            tag += f", s={_format_score(score)}"
+        parts = [node_id, f"[{tag}]"]
+        if node_id != ROOT_ID and status == "done":
+            parts.append(f"| {_candidate_formula(run_dir, node_id)}")
+        return " ".join(parts)
+
+    def walk(node_id: str, prefix: str) -> None:
+        children = nodes[node_id].get("children", [])
+        for i, child_id in enumerate(children):
+            is_last = i == len(children) - 1
+            print(f"{prefix}{'└── ' if is_last else '├── '}{label(child_id)}")
+            walk(child_id, prefix + ("    " if is_last else "│   "))
+
+    print(label(ROOT_ID))
+    walk(ROOT_ID, "")
 
 
 def main() -> None:
@@ -435,13 +526,17 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init")
-    p_init.add_argument("--score-direction", required=True, choices=("maximize", "minimize"))
-    p_init.add_argument("--run-dir", default=None,
-                        help="create the run at this fixed path instead of runs/llm-mcts_<timestamp>")
+    p_init.add_argument("--run-dir")
+    p_init.add_argument("--score-direction", required=True,
+                        choices=["maximize", "minimize"])
     p_init.add_argument("--ucb-c", type=float, default=DEFAULT_UCB_C)
     p_init.add_argument("--pw-k", type=float, default=DEFAULT_PW_K)
     p_init.add_argument("--pw-alpha", type=float, default=DEFAULT_PW_ALPHA)
     p_init.set_defaults(func=cmd_init)
+
+    p_discard = sub.add_parser("discard-pending")
+    p_discard.add_argument("--run-dir", required=True)
+    p_discard.set_defaults(func=cmd_discard_pending)
 
     p_next = sub.add_parser("next")
     p_next.add_argument("--run-dir", required=True)
