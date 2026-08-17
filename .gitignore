@@ -1,1 +1,6 @@
 /agonsr/settings.toml
+
+# Bytecode. mcts.py is run as a script by the WebUI's dispatcher, so this
+# appears next to it on its own.
+__pycache__/
+*.pyc
