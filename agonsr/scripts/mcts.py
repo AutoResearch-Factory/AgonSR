@@ -59,6 +59,25 @@ def _lock_path(run_dir: Path) -> Path:
     return run_dir / ".state.lock"
 
 
+def _sweep_stale_temps(run_dir: Path) -> None:
+    """Remove temporary state files nobody is writing any more.
+
+    _save_state unlinks its own on the way out, but a `finally` does not run
+    when the process is killed — and being killed is normal here: stopping a
+    run kills the process group, which lands between mkstemp and os.replace
+    often enough to leave one behind per few dozen stops.
+
+    Every _save_state happens under this lock, so while it is held there is by
+    definition no live writer and every one of these is orphaned. No mtime
+    guess is needed.
+    """
+    for stale in run_dir.glob(".state.*.tmp"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass        # a read-only directory is not a reason to refuse work
+
+
 @contextmanager
 def _state_lock(run_dir: Path):
     """Serialize every read-modify-write of the tree.
@@ -70,6 +89,7 @@ def _state_lock(run_dir: Path):
     with _lock_path(run_dir).open("a") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
+            _sweep_stale_temps(run_dir)
             yield
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
