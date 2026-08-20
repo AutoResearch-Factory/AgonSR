@@ -4,3 +4,10 @@
 # appears next to it on its own.
 __pycache__/
 *.pyc
+
+# Working notes from a design phase, and never this repository's to carry: the
+# two that were here planned the web front end, which lives in another repo
+# entirely. They are a second, staler answer to questions the code and its own
+# docs now answer, and they go out with a push nobody meant to make. The files
+# stay on disk; this only stops them coming back.
+docs/superpowers/
